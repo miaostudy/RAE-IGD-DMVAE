@@ -24,9 +24,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
-def sample_one_image(class_labels, save_path):
+def sample_one_image(class_labels, save_path, dynamic_seed):
     # Setup PyTorch:
-    torch.manual_seed(args.seed)
+    torch.manual_seed(dynamic_seed)
     torch.set_grad_enabled(False)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     rae_config, model_config, transport_config, sampler_config, guidance_config, misc, _ = parse_configs(args.config)
@@ -115,15 +115,16 @@ def main(args):
         save_dir = os.path.join(args.output, str(class_id))
         os.makedirs(save_dir, exist_ok=True)
         for i in range(args.ipc):
-            sample_one_image([class_id], os.path.join(save_dir, f'{i}.png'))
+            dynamic_seed = args.seed + class_id * 1000 + i + int(time() * 1000) % 1000000
+            sample_one_image([class_id], os.path.join(save_dir, f'{i}.png'),dynamic_seed)
 
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default='C:\\Users\\27759\\PycharmProjects\\RAE-IGD\\RAE\\configs\\stage2\\sampling\\ImageNet256\\DiTDHXL-DINOv2-B.yaml',type=str,
+    parser.add_argument("--config", default='RAE/configs/stage2/sampling/ImageNet256/DiTDHXL-DINOv2-B.yaml',type=str,
                         help="Path to the config file.")
-    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--seed", type=int, default=10)
     parser.add_argument("--ipc", type=int, default=10)
     parser.add_argument("--output", type=str, default='imagenet/')
     args = parser.parse_known_args()[0]
