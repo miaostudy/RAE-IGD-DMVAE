@@ -5,7 +5,7 @@ from stage1 import RAE
 import torch.nn as nn
 from omegaconf import OmegaConf
 import torch
-
+# 得到对象
 def get_obj_from_str(string, reload=False):
     module, cls = string.rsplit(".", 1)
     if reload:
