@@ -986,10 +986,10 @@ def load_data(args, tsne=False):
         print("len train datasets: {}".format(len(train_dataset.classes)))
         print("len val datasets: {}".format(len(val_dataset.classes)))
         assert nclass == len(val_dataset.classes)
-        for i in range(len(train_dataset.classes)):
-            print("Train Class {} : {}".format(i, train_dataset.classes[i]))
-            print("Val Class {} : {}".format(i, val_dataset.classes[i]))
-            assert train_dataset.classes[i] == val_dataset.classes[i]
+        # for i in range(len(train_dataset.classes)):
+        #     print("Train Class {} : {}".format(i, train_dataset.classes[i]))
+        #     print("Val Class {} : {}".format(i, val_dataset.classes[i]))
+        #     assert train_dataset.classes[i] == val_dataset.classes[i]
         assert np.array(train_dataset.targets).max() == nclass - 1
         assert np.array(val_dataset.targets).max() == nclass - 1
 

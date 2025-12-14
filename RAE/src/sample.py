@@ -76,6 +76,12 @@ def sample_one_image(class_labels, save_path, dynamic_seed, misc,device,guidance
 
 
 def main(args):
+    classes_name = {}
+    with open('IGD/misc/class_indices.txt', "r") as f:
+        lines = f.readlines()
+        for i, line in enumerate(lines):
+            classes_name[i] = line.strip()
+
     torch.set_grad_enabled(False)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # 加载参数
@@ -113,8 +119,10 @@ def main(args):
     else:
         raise NotImplementedError(f"Invalid sampling mode {mode}.")
 
+
+
     for class_id in range(1000):
-        save_dir = os.path.join(args.output, str(class_id))
+        save_dir = os.path.join(args.output, str(classes_name[class_id]))
         os.makedirs(save_dir, exist_ok=True)
         for i in range(args.ipc):
             dynamic_seed = args.seed + class_id * 1000 + i + int(time() * 1000) % 1000000
