@@ -119,10 +119,10 @@ def main(args):
     else:
         raise NotImplementedError(f"Invalid sampling mode {mode}.")
 
-
+    output = os.path.join(args.output, str(args.ipc))
 
     for class_id in range(1000):
-        save_dir = os.path.join(args.output, str(classes_name[class_id]))
+        save_dir = os.path.join(output, str(classes_name[class_id]))
         os.makedirs(save_dir, exist_ok=True)
         for i in range(args.ipc):
             dynamic_seed = args.seed + class_id * 1000 + i + int(time() * 1000) % 1000000
@@ -136,6 +136,6 @@ if __name__ == "__main__":
                         help="Path to the config file.")
     parser.add_argument("--seed", type=int, default=10)
     parser.add_argument("--ipc", type=int, default=10)
-    parser.add_argument("--output", type=str, default='imagenet/')
+    parser.add_argument("--output", type=str, default='imagenet')
     args = parser.parse_known_args()[0]
     main(args)
