@@ -960,6 +960,7 @@ def load_data(args, tsne=False):
             traindir = os.path.join(args.imagenet_dir[0], 'train')
             valdir = os.path.join(args.imagenet_dir[0], val_subdir)
         else:
+            # 传入的两个路径的话就是这里
             traindir = args.imagenet_dir[0]
             valdir = os.path.join(args.imagenet_dir[1], val_subdir)
 
@@ -983,9 +984,11 @@ def load_data(args, tsne=False):
 
         nclass = len(train_dataset.classes)
         print("len train datasets: {}".format(len(train_dataset.classes)))
-        print("len vak datasets: {}".format(len(val_dataset.classes)))
+        print("len val datasets: {}".format(len(val_dataset.classes)))
         assert nclass == len(val_dataset.classes)
         for i in range(len(train_dataset.classes)):
+            print("Train Class {} : {}".format(i, train_dataset.classes[i]))
+            print("Val Class {} : {}".format(i, val_dataset.classes[i]))
             assert train_dataset.classes[i] == val_dataset.classes[i]
         assert np.array(train_dataset.targets).max() == nclass - 1
         assert np.array(val_dataset.targets).max() == nclass - 1
