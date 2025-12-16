@@ -13,7 +13,7 @@ import os
 os.environ['http_proxy'] = '127.0.0.1:7890'
 os.environ['https_proxy'] = '127.0.0.1:7890'
 
-pretrained_models = {'DiT-XL-2-512x512.pt', 'DiT-XL-2-256x256.pt'}
+pretrained_models = {'DiT-XL-2-512x512.pt', 'DiT-XL-2-256x256.pt', 'sen-ye/dmvae', 'nyu-visionx/RAE-collections'}
 
 
 def find_model(model_name):
