@@ -250,13 +250,13 @@ def main(args):
         all_classes = fp.readlines()
     all_classes = [class_index.strip() for class_index in all_classes]
     if args.spec == 'woof':
-        file_list = './misc/class_woof.txt'
+        file_list = 'IGD/misc/class_woof.txt'
     elif args.spec == 'nette':
-        file_list = './misc/class_nette.txt'
+        file_list = 'IGD/misc/class_nette.txt'
     elif args.spec == '1k':
-        file_list = './misc/class_indices.txt'
+        file_list = 'IGD/misc/class_indices.txt'
     else:
-        file_list = './misc/class100.txt'
+        file_list = 'IGD/misc/class100.txt'
     with open(file_list, 'r') as fp:
         sel_classes = fp.readlines()
 
