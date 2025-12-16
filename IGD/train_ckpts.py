@@ -17,11 +17,12 @@ from misc.utils import random_indices, rand_bbox, AverageMeter, accuracy, get_ti
 from efficientnet_pytorch import EfficientNet
 import time
 import warnings
-
+device = 'cuda:1' if torch.cuda.is_available() else 'cpu'
 warnings.filterwarnings("ignore")
 model_names = sorted(
     name for name in models.__dict__
     if name.islower() and not name.startswith("__") and callable(models.__dict__[name]))
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 mean_torch = {}
 std_torch = {}
@@ -114,7 +115,7 @@ def main(args, logger, repeat=1):
 
 
 def train(args, model, train_loader, val_loader, plotter=None, logger=None):
-    criterion = nn.CrossEntropyLoss().cuda()
+    criterion = nn.CrossEntropyLoss().to(device)
     optimizer = optim.SGD(model.parameters(),
                           args.lr,
                           momentum=args.momentum,
@@ -130,7 +131,7 @@ def train(args, model, train_loader, val_loader, plotter=None, logger=None):
         cur_epoch, best_acc1 = load_checkpoint(pretrained, model, optimizer)
         # TODO: optimizer scheduler steps
 
-    model = model.cuda()
+    model = model.to(device)
     logger(f"Start training with base augmentation and {args.mixup} mixup")
 
     # Start training and validation
@@ -191,8 +192,8 @@ def train_epoch(args,
     num_exp = 0
     for i, (input, target) in enumerate(train_loader):
         if train_loader.device == 'cpu':
-            input = input.cuda()
-            target = target.cuda()
+            input = input.to(device)
+            target = target.to(device)
 
         data_time.update(time.time() - end)
 
@@ -253,8 +254,8 @@ def validate(args, val_loader, model, criterion, epoch, logger=None):
 
     end = time.time()
     for i, (input, target) in enumerate(val_loader):
-        input = input.cuda()
-        target = target.cuda()
+        input = input.to(device)
+        target = target.to(device)
         output = model(input)
 
         loss = criterion(output, target)
