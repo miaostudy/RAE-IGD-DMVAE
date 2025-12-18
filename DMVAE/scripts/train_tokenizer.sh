@@ -14,7 +14,7 @@ log_dir=./exps/
 freeze_encoder=True
 freeze_mlp=False
 lpips_path=./DMVAE/ckpt_vae/vgg.pth
-dataset_path=/data2/wlf/datasets/ImageNet
+dataset_path=/root/autodl-tmp/imagenet
 epoch=10 # 10 is recommended for tokenizer pretraining, 50 is recommended for decoder fine-tuning
 
 torchrun \
