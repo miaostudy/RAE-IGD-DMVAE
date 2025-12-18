@@ -21,6 +21,8 @@ from evaluation.fid import FID
 from evaluation.metrics import PSNR
 from contextlib import nullcontext
 
+os.environ["http_proxy"] = "127.0.0.1:7890"
+os.environ["https_proxy"] = "127.0.0.1:7890"
 
 class Args(Tap):
     # logging / exp
