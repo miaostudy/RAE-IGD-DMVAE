@@ -28,6 +28,9 @@ python scripts/download.py
 | IGD     | 10  |                |                   |
 |         | 50  |                |                   |
 |         | 100 |                |                   |
+| DM-VAE  | 10  |                |                   |
+|         | 50  |                |                   |
+|         | 100 |                |                   |
 | RAE+IGD | 10  |                |                   |
 |         | 50  |                |                   |
 |         | 100 |                |                   |
@@ -39,7 +42,22 @@ python IGD/train.py -d imagenet --imagenet_dir imagenet/ipc_50/ /data2/wlf/datas
 ![curve_0.png](https://youke2.picui.cn/s1/2025/12/16/6940c018cb9aa.png)
 ## DMVAE
 ### tokenizer
+需要重新组织一些imagenet的验证集，变成ImageFolder的结构
+cd到imagenet的路径中
+
+```shell
+wget -qO- https://raw.githubusercontent.com/soumith/imagenetloader.torch/master/valprep.sh | bash```
+```
+
 ```shell
 bash DMVAE/scripts/train_tokenizer.sh
 ```
+可能遇到一些错误：
+gpu版本太新，.so文件找不到，那就先find，再把路径加到PATH里
+```shell
+find /root/miniconda3/envs/raeigd -name "libnvrtc-builtins.so*"
+export LD_LIBRARY_PATH=/root/miniconda3/envs/raeigd/lib/python3.12/site-packages/nvidia/cu13/lib:$LD_LIBRARY_PATH
+```
+
+
 # 改进位置

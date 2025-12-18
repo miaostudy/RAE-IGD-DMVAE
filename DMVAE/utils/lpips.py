@@ -67,7 +67,7 @@ class LPIPS(nn.Module):
 
     def load_from_pretrained(self, ckpt_path=None, name="vgg_lpips"):
         # ckpt_path = get_ckpt_path(name, os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache"))
-        self.load_state_dict(torch.load(ckpt_path, map_location=torch.device("cpu"), weights_only=True), strict=False)
+        self.load_state_dict(torch.load(ckpt_path, map_location=torch.device("cpu"), weights_only=False), strict=False)
 
     @classmethod
     def from_pretrained(cls, name="vgg_lpips"):
