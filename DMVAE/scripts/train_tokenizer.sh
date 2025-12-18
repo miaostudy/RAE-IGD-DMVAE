@@ -5,7 +5,7 @@ export num_nodes=${NNODES:-1}
 export node_rank=${NODE_RANK:-0}
 export master_addr=${MASTER_ADDR:-"localhost"}
 export master_port=${MASTER_PORT:-29511}
-export nproc_per_node=${NPROC_PER_NODE:-8}
+export nproc_per_node=${NPROC_PER_NODE:-1}
 
 
 
