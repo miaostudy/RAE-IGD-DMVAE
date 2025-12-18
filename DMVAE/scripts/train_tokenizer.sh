@@ -23,7 +23,7 @@ torchrun \
     --nproc_per_node=$nproc_per_node \
     --master_addr=$master_addr \
     --master_port=$master_port \
-    train_tokenizer.py \
+    DMVAE/train_tokenizer.py \
     --exp_name $exp_name \
     --log_dir $log_dir \
     --epoch $epoch \
