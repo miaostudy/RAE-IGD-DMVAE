@@ -12,10 +12,15 @@ uv pip install timm==0.9.16 accelerate==0.23.0 torchdiffeq==0.2.5 wandb
 uv pip install "numpy<2" transformers einops omegaconf efficientnet_pytorch matplotlib diffusers
 pip install -r requirements.txt
 ```
-下载模型（21G）, 需要设置代理, 有一些代码运行时需要在huggingface上下载模型，需要设置代理
+下载模型（21G）, 有一些代码运行时也需要从huggingface上下载模型，需要设置代理
 ``` shell
 uv pip install huggingface_hub
 python scripts/download.py
+```
+项目中有些文件使用了`git-lfs`进行追踪，一般情况下`git clone`时会自动下载，若未下载，请安装`git lfs`并运行
+```shell
+git lfs install
+git lfs pull
 ```
 # 实验结果
 ## ImageNet
