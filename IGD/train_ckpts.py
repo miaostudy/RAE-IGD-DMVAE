@@ -144,6 +144,7 @@ def train(args, model, train_loader, val_loader, plotter=None, logger=None):
     timestamps.append([p.detach().cpu() for p in model.parameters()])
     args.epoch_print_freq = 1
 
+    print(f'epoch: {cur_epoch}/{args.epochs}')
     epoch_range = trange(cur_epoch + 1, args.epochs + 1, desc="Training Epochs", leave=True, unit="epoch")
     for epoch in epoch_range:
         acc1_tr, top5_tr, loss_tr = train_epoch(args,
