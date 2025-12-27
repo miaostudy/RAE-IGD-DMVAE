@@ -26,7 +26,7 @@ from models import DiT_models
 from download import find_model
 from diffusion import create_diffusion
 from diffusers.models import AutoencoderKL
-
+from tqdm import tqdm
 
 #################################################################################
 #                             Training Helper Functions                         #
@@ -219,6 +219,7 @@ def main(args):
     # Prepare models for training:
     update_ema(ema, model.module, decay=0)  # Ensure EMA is initialized with synced weights
     model.train()  # important! This enables embedding dropout for classifier-free guidance
+
     ema.eval()  # EMA model should always be in eval mode
 
     # Variables for monitoring/logging purposes:

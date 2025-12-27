@@ -17,8 +17,8 @@ pip install -r requirements.txt
 uv pip install huggingface_hub
 python scripts/download.py
 ```
-# 实验
-## Baseline
+# Baseline
+## IGD
 ### ImageNet1K
 这个和ImageNete、ImageWoof的设置有很大不同，不能直接沿用设置
 ![](https://youke2.picui.cn/s1/2025/12/27/694fc73be2283.png)
@@ -29,7 +29,7 @@ python scripts/download.py
 4. 代理模型参数：
     ```shell
     model:ConvNet-6
-    rl: 0.01
+    lr: 0.01 # 有一段代码是：当“args.dataset=imagenet”时lr=0.1, 而论文中明确指出是0.01来训练代理模型, 这里我选择相信代码
     epoch: 50
     ```
 5. 选择有代表性的检查点：代理模型的检查点不是每个epcoh都保存的，只保存“与参考checkpoint”的梯度相似度不超过**0.7**的checkpoint。计算引导Loss的时候只是用这些checkpoint
@@ -40,37 +40,22 @@ python scripts/download.py
    
     在训练代理模型的时候，保存了完整的50个epoch的模型参数。在采样的时候直接**人为指定加载哪些epoch的参数**，比如`convnet6`就加载`idxs = [0,5,18,52]`时的代理模型参数来进行引导。
 2. 论文里各个位置说的都是训练50个epoch，在加载idx的时候加载了52。
-## ImageNet
-## ResNet-10
-| method  | ipc | train accuracy | validate accuracy |
-|---------|-----|----------------|-------------------|
-| RAE     | 10  | 78%            | 0.5428%           |
-|         | 50  | 69.4           | 31%               |
-|         | 100 |                |                   |
-| IGD     | 10  |                |                   |
-|         | 50  |                |                   |
-|         | 100 |                |                   |
-| DM-VAE  | 10  |                |                   |
-|         | 50  |                |                   |
-|         | 100 |                |                   |
-| RAE+IGD | 10  |                |                   |
-|         | 50  |                |                   |
-|         | 100 |                |                   |
 
-**RAE-IPC50**
+### MiniMax
+IGD的imagenet1k基于与训练的Minimax模型，但是两者均未给出checkpoint，需要自己训练。
+
+单机双卡：
 ```shell
-python IGD/train.py -d imagenet --imagenet_dir imagenet/ipc_50/ /data2/wlf/datasets/imagenet/ -n resnet --depth 10 --nclass 1000 --norm_type instance --ipc 50 --tag test --slct_type random --spec 1k --batch_size 128 --verbose
+torchrun --nnode=1 --nproc_per_node=2 --master_port=25678 MinimaxDiffusion/train_dit.py --model DiT-XL/2   --data-path /data2/wlf/datasets/imagenet/train/ --ckpt pretrained_models/DiT-XL-2-256x256.pt --global-batch-size 8 --tag minimax --ckpt-every 12000 --log-every 1500 --epochs 8 --condense --finetune-ipc -1 --results-dir logs/run-0 --spec 1k
 ```
-![curve_0.png](https://youke2.picui.cn/s1/2025/12/16/6940c018cb9aa.png)
+
 ## DMVAE
 ### tokenizer
 需要重新组织一些imagenet的验证集，变成ImageFolder的结构
 cd到imagenet的路径中
-
 ```shell
 wget -qO- https://raw.githubusercontent.com/soumith/imagenetloader.torch/master/valprep.sh | bash```
 ```
-
 ```shell
 bash DMVAE/scripts/train_tokenizer.sh
 ```
@@ -81,5 +66,30 @@ find /root/miniconda3/envs/raeigd -name "libnvrtc-builtins.so*"
 export LD_LIBRARY_PATH=/root/miniconda3/envs/raeigd/lib/python3.12/site-packages/nvidia/cu13/lib:$LD_LIBRARY_PATH
 ```
 
+# 结果和命令
+## ImageNet
+## ResNet-10
+| method         | ipc | train accuracy | validate accuracy |
+|----------------|-----|----------------|-------------------|
+| RAE            | 10  | 78%            | 0.5428%           |
+|                | 50  | 69.4           | 31%               |
+|                | 100 | -              | -                 |
+| IGD            | 10  |                |                   |
+|                | 50  |                |                   |
+|                | 100 |                |                   |
+| DM-VAE         | 10  |                |                   |
+|                | 50  |                |                   |
+|                | 100 |                |                   |
+| RAE+IGD(fixed) | 10  |                |                   |
+|                | 50  |                |                   |
+|                | 100 |                |                   |
+
+
+![curve_0.png](https://youke2.picui.cn/s1/2025/12/16/6940c018cb9aa.png)
+
+**RAE-IPC50**
+```shell
+python IGD/train.py -d imagenet --imagenet_dir imagenet/ipc_50/ /data2/wlf/datasets/imagenet/ -n resnet --depth 10 --nclass 1000 --norm_type instance --ipc 50 --tag test --slct_type random --spec 1k --batch_size 128 --verbose
+```
 
 # 改进位置
