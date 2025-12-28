@@ -27,7 +27,7 @@ import torch.nn as nn
 import os
 
 os.environ["http_proxy"] = "http://localhost:7890"
-os.environ["https_proxy"] = "https://localhost:7890"
+os.environ["https_proxy"] = "http://localhost:7890"
 
 def center_crop_arr(pil_image, image_size):
     """
@@ -264,12 +264,12 @@ def main(args):
     with open(file_list, 'r') as fp:
         sel_classes = fp.readlines()
 
-    phase = max(0, args.phase)
-    cls_from = args.nclass * phase
-    cls_to = args.nclass * (phase + 1)
+    phase = max(0, args.phase) # 0
+    cls_from = args.nclass * phase # 0
+    cls_to = args.nclass * (phase + 1) # 1000
     sel_classes = sel_classes[cls_from:cls_to]
     sel_classes = [sel_class.strip() for sel_class in sel_classes]
-    class_labels = []
+    class_labels = [] # ['n01440764', ...]
     
     for sel_class in sel_classes:
         class_labels.append(all_classes.index(sel_class)) # 0-1000

@@ -22,6 +22,7 @@ python scripts/download.py
 ### ImageNet1K
 这个和ImageNete、ImageWoof的设置有很大不同，不能直接沿用设置
 ![](https://youke2.picui.cn/s1/2025/12/27/694fc73be2283.png)
+
 相关设置：
 1. 软标签生成模型：**resnet-18**
 2. 生成模型：**MiniMax**，这是一个针对数据集蒸馏任务微调过的DIT模型
@@ -41,9 +42,15 @@ python scripts/download.py
     在训练代理模型的时候，保存了完整的50个epoch的模型参数。在采样的时候直接**人为指定加载哪些epoch的参数**，比如`convnet6`就加载`idxs = [0,5,18,52]`时的代理模型参数来进行引导。
 2. 论文里各个位置说的都是训练50个epoch，在加载idx的时候加载了52。
 
+
+ckpt自己就只有30%左右的准确率，用它来算梯度引导采样，是不是不好
+
+![](https://youke2.picui.cn/s1/2025/12/28/6950d98f2e617.png)
 ### MiniMax
 IGD的imagenet1k基于与训练的Minimax模型，但是两者均未给出checkpoint，需要自己训练。
 
+
+![](https://youke2.picui.cn/s1/2025/12/28/6950daa6e50ae.png)
 单机双卡：
 ```shell
 torchrun --nnode=1 --nproc_per_node=2 --master_port=25678 MinimaxDiffusion/train_dit.py --model DiT-XL/2   --data-path /data2/wlf/datasets/imagenet/train/ --ckpt pretrained_models/DiT-XL-2-256x256.pt --global-batch-size 8 --tag minimax --ckpt-every 12000 --log-every 1500 --epochs 8 --condense --finetune-ipc -1 --results-dir logs/run-0 --spec 1k

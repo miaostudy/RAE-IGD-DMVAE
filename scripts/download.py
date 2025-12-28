@@ -5,7 +5,7 @@ from huggingface_hub import hf_hub_download, snapshot_download
 import argparse
 
 os.environ['http_proxy'] = 'http://127.0.0.1:7890'
-os.environ['https_proxy'] = 'https://127.0.0.1:7890'
+os.environ['https_proxy'] = 'http://127.0.0.1:7890'
 
 pretrained_models = ['sen-ye/dmvae', 'nyu-visionx/RAE-collections', 'DiT-XL-2-512x512.pt', 'DiT-XL-2-256x256.pt']
 
