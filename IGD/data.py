@@ -926,12 +926,12 @@ def load_data(args, tsne=False):
         train_transform, test_transform = transform_cifar(augment=args.augment)
 
         if args.dataset == 'cifar100':
-            train_dataset = datasets.CIFAR100(args.data_dir, train=True, transform=train_transform)
-            val_dataset = datasets.CIFAR100(args.data_dir, train=False, transform=test_transform)
+            train_dataset = datasets.CIFAR100(args.data_dir, train=True, transform=train_transform, download=True)
+            val_dataset = datasets.CIFAR100(args.data_dir, train=False, transform=test_transform, download=True)
             nclass = 100
         elif args.dataset == 'cifar10':
-            train_dataset = datasets.CIFAR10(args.data_dir, train=True, transform=train_transform)
-            val_dataset = datasets.CIFAR10(args.data_dir, train=False, transform=test_transform)
+            train_dataset = datasets.CIFAR10(args.data_dir, train=True, transform=train_transform, download=True)
+            val_dataset = datasets.CIFAR10(args.data_dir, train=False, transform=test_transform, download=True)
             nclass = 10
         else:
             raise Exception('unknown dataset: {}'.format(args.dataset))
