@@ -105,7 +105,7 @@ def define_model(args, nclass, logger=None, size=None):
     return model
 
 def rand_ckpts(args):
-    expert_path = './%s/%s/%s%s/'%(args.ckpt_path, args.spec,args.depth,args.net_type) #ckpt 路径./ckps/cifar10/resnet10
+    expert_path = './%s/%s/%s%s/'%(args.ckpt_path, args.spec,args.net_type,args.depth) #ckpt 路径./ckps/cifar10/resnet10
     expert_files = os.listdir(expert_path)
     # rand_id1 = np.random.choice(len(expert_files))
     rand_id1 = 0
@@ -294,7 +294,7 @@ def main(args):
     # 定义模型：DIT 32,1000
     model = DiT_models[args.model](
         input_size=latent_size,
-        num_classes=args.num_classes
+        num_classes=args.nclass
     ).to(device)
     # Auto-download a pre-trained model or load a custom DiT checkpoint from train.py:
     ckpt_path = args.ckpt or f"DiT-XL-2-{args.image_size}x{args.image_size}.pt"
