@@ -17,6 +17,8 @@ pip install -r requirements.txt
 uv pip install huggingface_hub
 python scripts/download.py
 ```
+**MiniMax CheckPoint**：[Google drive](https://drive.usercontent.google.com/download?id=1j08USXolZqIyxysf12pu3932Gp2PeGYW&authuser=0)
+
 # Baseline
 ## IGD
 ### ImageNet1K
