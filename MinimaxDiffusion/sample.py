@@ -21,15 +21,15 @@ def main(args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Labels to condition the model
-    with open('./misc/class_indices.txt', 'r') as fp:
+    with open('./MinimaxDiffusion/misc/class_indices.txt', 'r') as fp:
         all_classes = fp.readlines()
     all_classes = [class_index.strip() for class_index in all_classes]
     if args.spec == 'woof':
-        file_list = './misc/class_woof.txt'
+        file_list = './MinimaxDiffusion/misc/class_woof.txt'
     elif args.spec == 'nette':
-        file_list = './misc/class_nette.txt'
+        file_list = './MinimaxDiffusion/misc/class_nette.txt'
     else:
-        file_list = './misc/class100.txt'
+        file_list = './MinimaxDiffusion/misc/class100.txt'
     with open(file_list, 'r') as fp:
         sel_classes = fp.readlines()
 
