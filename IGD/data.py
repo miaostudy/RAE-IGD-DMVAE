@@ -256,11 +256,20 @@ class ImageFolder_mp(datasets.DatasetFolder):
         self.sel_class_global_idx = -1
         if self.sel_class != 'none':
             try:
-                all_classes_sorted = sorted(os.listdir(self.root))
+                # 针对 woof, nette, 1k 等 spec
+                if self.spec in ['woof', 'nette', '1k']:
+                    file_list = './IGD/misc/class_indices.txt'
+                    with open(file_list, 'r') as f:
+                        all_classes_sorted = [x.strip() for x in f.readlines()]
+                else:
+                    # 其他情况回退到读取文件夹
+                    all_classes_sorted = sorted(os.listdir(self.root))
+
                 if self.sel_class in all_classes_sorted:
                     self.sel_class_global_idx = all_classes_sorted.index(self.sel_class)
             except Exception as e:
                 print(f"Warning: Could not determine global index for {self.sel_class}: {e}")
+
 
         # if ipc > 0:
         #     self.samples = self._subset(slct_type=slct_type, ipc=ipc)
@@ -312,10 +321,23 @@ class ImageFolder_mp(datasets.DatasetFolder):
         return classes, class_to_idx
 
     def find_original_classes(self):
-        all_classes = sorted(os.listdir(self.root))
+        if self.spec in ['woof', 'nette', '1k']:
+            file_list = './IGD/misc/class_indices.txt'
+            if os.path.exists(file_list):
+                with open(file_list, 'r') as f:
+                    all_classes = [x.strip() for x in f.readlines()]
+            else:
+                all_classes = sorted(os.listdir(self.root))
+        else:
+            all_classes = sorted(os.listdir(self.root))
+
         original_labels = []
         for class_name in self.classes:
-            original_labels.append(all_classes.index(class_name)) # original labels can be regarded as the index of a folder name in the root directory
+            if class_name in all_classes:
+                original_labels.append(all_classes.index(class_name))
+            else:
+                print(f"Warning: Class {class_name} not found in index list.")
+                original_labels.append(0)
         return original_labels
 
     def _subset(self, slct_type='random', ipc=10):
