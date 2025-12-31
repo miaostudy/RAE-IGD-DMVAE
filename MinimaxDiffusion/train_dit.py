@@ -28,6 +28,9 @@ from diffusion import create_diffusion
 from diffusers.models import AutoencoderKL
 from tqdm import tqdm
 
+os.environ["http_proxy"] = "127.0.0.1:7890"
+os.environ["https_proxy"] = "127.0.0.1:7890"
+
 #################################################################################
 #                             Training Helper Functions                         #
 #################################################################################
