@@ -12,7 +12,7 @@ import argparse
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torchvision import transforms
-from data import ImageFolder, ImageFolder_mp
+from data import ImageFolder, ImageFolder_mp,CIFAR10_mp
 from collections import OrderedDict, defaultdict
 from PIL import Image
 import numpy as np
@@ -172,9 +172,16 @@ def get_grads(sel_classes, class_labels, sel_class, ckpts, surrogate, device='cu
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
     ])
-    dataset = ImageFolder_mp(args.data_path, transform=transform, nclass=args.nclass,
-                          ipc=args.real_ipc, spec=args.spec, phase=args.phase,
-                          seed=0, return_origin=True, sel_class=sel_class) # target idx [0-nclss]
+    if args.spec == 'cifar10':
+        dataset = CIFAR10_mp(args.data_path, train=True, transform=transform,
+                             download=True, sel_class=sel_class, return_origin=True)
+    else:
+        dataset = ImageFolder_mp(args.data_path, transform=transform, nclass=args.nclass,
+                                 ipc=args.real_ipc, spec=args.spec, phase=args.phase,
+                                 seed=0, return_origin=True, sel_class=sel_class)
+    # dataset = ImageFolder_mp(args.data_path, transform=transform, nclass=args.nclass,
+    #                       ipc=args.real_ipc, spec=args.spec, phase=args.phase,
+    #                       seed=0, return_origin=True, sel_class=sel_class) # target idx [0-nclss]
     # dataset_real = ImageFolder(args.data_path, transform=transform, nclass=args.nclass,
     #                       ipc=args.finetune_ipc, spec=args.spec, phase=args.phase,
     #                       seed=0, slct_type='loss', return_origin=True)
@@ -352,8 +359,6 @@ def main(args):
             for image_index, image in enumerate(samples):
                 save_image(image, os.path.join(args.save_dir, sel_class,
                                                f"{image_index + shift * batch_size + args.total_shift}.png"), normalize=True, value_range=(-1, 1))
-
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

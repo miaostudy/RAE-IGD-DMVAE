@@ -1224,3 +1224,54 @@ if __name__ == '__main__':
     print(data.shape)
     torch.save(data, "./results/samples/init/data.pt")
     print("image saved!")
+
+
+class CIFAR10_mp(datasets.CIFAR10):
+    def __init__(self, root, train=True, transform=None, target_transform=None,
+                 download=False, sel_class='none', return_origin=False, spec='none',
+                 nclass=10, ipc=-1, phase=0, seed=-1):
+        super(CIFAR10_mp, self).__init__(root, train=train, transform=transform,
+                                         target_transform=target_transform, download=download)
+        self.return_origin = return_origin
+        self.sel_class = sel_class
+
+        # CIFAR-10 class names
+        self.classes_name = ['airplane', 'automobile', 'bird', 'cat', 'deer',
+                             'dog', 'frog', 'horse', 'ship', 'truck']
+
+        # Filter data if sel_class is specified
+        if self.sel_class != 'none':
+            # sel_class 传进来的可能是数字字符串 '0' 或者类别名 'airplane'
+            if self.sel_class in self.classes_name:
+                target_idx = self.classes_name.index(self.sel_class)
+            else:
+                try:
+                    target_idx = int(self.sel_class)
+                except ValueError:
+                    raise ValueError(f"Unknown class: {self.sel_class}")
+
+            # Filter the data and targets
+            mask = np.array(self.targets) == target_idx
+            self.data = self.data[mask]
+            self.targets = np.array(self.targets)[mask].tolist()
+
+    def __getitem__(self, index):
+        img, target = self.data[index], self.targets[index]
+
+        # doing this so that it is consistent with all other datasets
+        # to return a PIL Image
+        img = Image.fromarray(img)
+
+        if self.transform is not None:
+            img = self.transform(img)
+
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        # 保持与 ImageFolder_mp 接口一致
+        original_target = target
+
+        if self.return_origin:
+            return img, target, original_target
+        else:
+            return img, target
