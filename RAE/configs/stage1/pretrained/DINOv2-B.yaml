@@ -6,7 +6,7 @@ stage_1:
     encoder_input_size: 224
     encoder_params: {'dinov2_path': 'facebook/dinov2-with-registers-base', 'normalize': True}
     decoder_config_path: 'configs/decoder/ViTXL'
-    pretrained_decoder_path: 'models/decoders/dinov2/wReg_base/ViTXL_n08/models.pt'
+    pretrained_decoder_path: 'dmvae_models/decoders/dinov2/wReg_base/ViTXL_n08/dmvae_models.pt'
     noise_tau: 0.
     reshape_to_2d: True
-    normalization_stat_path: 'models/stats/dinov2/wReg_base/imagenet1k/stat.pt'
+    normalization_stat_path: 'dmvae_models/stats/dinov2/wReg_base/imagenet1k/stat.pt'

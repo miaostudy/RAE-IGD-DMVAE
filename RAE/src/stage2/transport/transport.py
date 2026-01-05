@@ -10,12 +10,12 @@ from .integrators import ode, sde
 
 class ModelType(enum.Enum):
     """
-    Which type of output the models predicts.
+    Which type of output the dmvae_models predicts.
     """
 
-    NOISE = enum.auto()  # the models predicts epsilon
-    SCORE = enum.auto()  # the models predicts \nabla \log p(x)
-    VELOCITY = enum.auto()  # the models predicts v(x)
+    NOISE = enum.auto()  # the dmvae_models predicts epsilon
+    SCORE = enum.auto()  # the dmvae_models predicts \nabla \log p(x)
+    VELOCITY = enum.auto()  # the dmvae_models predicts v(x)
 
 class PathType(enum.Enum):
     """
@@ -186,11 +186,11 @@ class Transport:
         x1, 
         model_kwargs=None
     ):
-        """Loss for training the score models
+        """Loss for training the score dmvae_models
         Args:
-        - models: backbone models; could be score, noise, or velocity
+        - dmvae_models: backbone dmvae_models; could be score, noise, or velocity
         - x1: datapoint
-        - model_kwargs: additional arguments for the models
+        - model_kwargs: additional arguments for the dmvae_models
         """
         if model_kwargs == None:
             model_kwargs = {}
@@ -278,14 +278,14 @@ class Transport:
 
 
 class Sampler:
-    """Sampler class for the transport models"""
+    """Sampler class for the transport dmvae_models"""
     def __init__(
         self,
         transport,
     ):
         """Constructor for a general sampler; supporting different sampling methods
         Args:
-        - transport: an tranport object specify models prediction & interpolant type
+        - transport: an tranport object specify dmvae_models prediction & interpolant type
         """
         
         self.transport = transport

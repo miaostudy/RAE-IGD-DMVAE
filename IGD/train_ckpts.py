@@ -19,7 +19,7 @@ from efficientnet_pytorch import EfficientNet
 import warnings
 from tqdm import tqdm, trange
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from DMVAE.models.dinov2 import vit_small, vit_base, vit_large
+from DMVAE.dmvae_models.dinov2 import vit_small, vit_base, vit_large
 
 device = 'cuda:1' if torch.cuda.is_available() else 'cpu'
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
@@ -38,7 +38,7 @@ for key, val in STDS.items():
 
 
 def define_model(args, nclass, logger=None, size=None):
-    """Define neural network models
+    """Define neural network dmvae_models
     """
     if size is None:
         size = args.size

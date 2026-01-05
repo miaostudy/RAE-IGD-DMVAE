@@ -41,7 +41,7 @@ def get_ckpt_path(name, root=None, check=False):
         root = os.path.join(root, '.caches')
     path = os.path.join(root, CKPT_MAP[name])
     if not os.path.exists(path) or (check and not md5_hash(path) == MD5_MAP[name]):
-        print("Downloading {} models from {} to {}".format(name, URL_MAP[name], path))
+        print("Downloading {} dmvae_models from {} to {}".format(name, URL_MAP[name], path))
         download(URL_MAP[name], path)
         md5 = md5_hash(path)
         assert md5 == MD5_MAP[name], md5

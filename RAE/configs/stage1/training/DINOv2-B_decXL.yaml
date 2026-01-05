@@ -10,7 +10,7 @@ stage_1:
     decoder_config_path: 'configs/decoder/ViTXL'
     noise_tau: 0.8 # training 0.8, at inference time always set to 0
     reshape_to_2d: true
-    #normalization_stat_path: 'models/stats/dinov2/wReg_base/imagenet1k/stat.pt'
+    #normalization_stat_path: 'dmvae_models/stats/dinov2/wReg_base/imagenet1k/stat.pt'
 
 
 training:
@@ -36,7 +36,7 @@ training:
 gan:
   disc:
     arch:
-      dino_ckpt_path: 'models/discs/dino_vit_small_patch8_224.pth'
+      dino_ckpt_path: 'dmvae_models/discs/dino_vit_small_patch8_224.pth'
       ks: 9
       norm_type: 'bn'
       using_spec_norm: true

@@ -7,8 +7,8 @@ import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from tap import Tap
 from utils.build_dataset import build_dataset
-from models import VAE, DinoDisc, NLayerDiscriminator
-from models.init_param import init_weights
+from dmvae_models import VAE, DinoDisc, NLayerDiscriminator
+from dmvae_models.init_param import init_weights
 from diffusion.lightningdit.lightningdit import LightningDiT_models, LightningDiT
 from diffusion.transport import create_transport
 from utils.lpips import LPIPS

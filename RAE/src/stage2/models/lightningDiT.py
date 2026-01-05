@@ -17,7 +17,7 @@ class LightningDiTBlock(nn.Module):
     - RMSNorm
     - SwiGLU
     - No shift AdaLN.
-    Not all of them are used in the final models, please refer to the paper for more details.
+    Not all of them are used in the final dmvae_models, please refer to the paper for more details.
     """
     def __init__(
         self,
@@ -110,7 +110,7 @@ class LightningFinalLayer(nn.Module):
 
 class LightningDiT(nn.Module):
     """
-    Diffusion models with a Transformer backbone.
+    Diffusion dmvae_models with a Transformer backbone.
     """
     def __init__(
         self,
@@ -283,7 +283,7 @@ class LightningDiT(nn.Module):
         return torch.cat([eps, rest], dim=1)
     def forward_with_autoguidance(self, x, t, y, cfg_scale, additional_model_forward, cfg_interval=(-1e4, -1e4), interval_cfg: float = 0.0):
         """
-        Forward pass of LightningDiT, but also contain the forward pass for the additional models
+        Forward pass of LightningDiT, but also contain the forward pass for the additional dmvae_models
         """
         half = x[: len(x) // 2] # cut the x by half, autoguidance does not need repeated input
         t = t[: len(t) // 2]

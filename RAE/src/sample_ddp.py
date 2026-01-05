@@ -2,7 +2,7 @@
 # LICENSE file in the root directory of this source tree.
 
 """
-Samples a large number of images from a pre-trained stage-2 models using DDP and
+Samples a large number of images from a pre-trained stage-2 dmvae_models using DDP and
 stores results for downstream metrics. For single-device sampling, use sample.py.
 """
 import sys
@@ -181,7 +181,7 @@ def main(args):
     if guidance_scale > 1.0 and guidance_method == "autoguidance":
         guid_model_config = guidance_config.get("guidance_model")
         if guid_model_config is None:
-            raise ValueError("Please provide a guidance models config when using autoguidance.")
+            raise ValueError("Please provide a guidance dmvae_models config when using autoguidance.")
         guid_model: Stage2ModelProtocol = instantiate_from_config(guid_model_config).to(device)
         guid_model.eval()
         guid_model_forward = guid_model.forward
@@ -260,7 +260,7 @@ def main(args):
                 )
                 if guidance_method == "autoguidance":
                     if guid_model_forward is None:
-                        raise RuntimeError("Guidance models forward is not initialized.")
+                        raise RuntimeError("Guidance dmvae_models forward is not initialized.")
                     model_kwargs["additional_model_forward"] = guid_model_forward
                     model_fn = model.forward_with_autoguidance
                 else:

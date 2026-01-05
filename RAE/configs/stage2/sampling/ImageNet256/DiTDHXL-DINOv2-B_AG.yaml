@@ -6,12 +6,12 @@ stage_1:
     encoder_input_size: 224
     encoder_params: {'dinov2_path': 'facebook/dinov2-with-registers-base', 'normalize': True}
     decoder_config_path: 'configs/decoder/ViTXL'
-    pretrained_decoder_path: 'models/decoders/dinov2/wReg_base/ViTXL_n08/models.pt'
+    pretrained_decoder_path: 'dmvae_models/decoders/dinov2/wReg_base/ViTXL_n08/dmvae_models.pt'
     noise_tau: 0.
     reshape_to_2d: True
-    normalization_stat_path: 'models/stats/dinov2/wReg_base/imagenet1k/stat.pt'
+    normalization_stat_path: 'dmvae_models/stats/dinov2/wReg_base/imagenet1k/stat.pt'
 stage_2:
-  target: stage2.models.DDT.DiTwDDTHead
+  target: stage2.dmvae_models.DDT.DiTwDDTHead
   params:
     input_size: 16
     patch_size: 1
@@ -28,7 +28,7 @@ stage_2:
     use_rmsnorm: True
     wo_shift: False
     use_pos_embed: True
-  ckpt: 'models/DiTs/Dinov2/wReg_base/ImageNet256/DiTDH-XL/stage2_model.pt'
+  ckpt: 'dmvae_models/DiTs/Dinov2/wReg_base/ImageNet256/DiTDH-XL/stage2_model.pt'
 
 
 transport:
@@ -52,7 +52,7 @@ guidance:
   t-min: 0.0
   t-max: 1.0
   guidance_model:
-    target: stage2.models.DDT.DiTwDDTHead
+    target: stage2.dmvae_models.DDT.DiTwDDTHead
     params:
       input_size: 16
       patch_size: 1 
@@ -69,7 +69,7 @@ guidance:
       use_rmsnorm: True
       wo_shift: False
       use_pos_embed: True
-    ckpt: 'models/DiTs/Dinov2/wReg_base/ImageNet256/DiTDH-S_ep14/stage2_model.pt'
+    ckpt: 'dmvae_models/DiTs/Dinov2/wReg_base/ImageNet256/DiTDH-S_ep14/stage2_model.pt'
 
 misc:
   latent_size: [768, 16, 16] # [C, H, W]

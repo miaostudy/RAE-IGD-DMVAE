@@ -10,11 +10,11 @@ def create_transport(
     time_dist_shift=1.0,
 ):
     """function for creating Transport object
-    **Note**: models prediction defaults to velocity
+    **Note**: dmvae_models prediction defaults to velocity
     Args:
     - path_type: type of path to use; default to linear
-    - learn_score: set models prediction to score
-    - learn_noise: set models prediction to noise
+    - learn_score: set dmvae_models prediction to score
+    - learn_noise: set dmvae_models prediction to noise
     - velocity_weighted: weight loss by velocity weight
     - likelihood_weighted: weight loss by likelihood weight
     - train_eps: small epsilon for avoiding instability during training

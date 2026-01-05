@@ -40,7 +40,7 @@ class Stage2ModelProtocol(Protocol):
 
 # @register_stage2()
 # def DiTXL(token_dim: int, input_size: int) -> LightningDiT:
-#     models = LightningDiT(
+#     dmvae_models = LightningDiT(
 #         input_size=input_size,
 #         patch_size=1,
 #         in_channels=token_dim,
@@ -51,11 +51,11 @@ class Stage2ModelProtocol(Protocol):
 #         class_dropout_prob=0.1,
 #         num_classes=1000,
 #     )
-#     return models
+#     return dmvae_models
 
 # @register_stage2()
 # def DDTXL(token_dim: int, input_size: int) -> DiTwDDTHead:
-#     models = DiTwDDTHead(
+#     dmvae_models = DiTwDDTHead(
 #         input_size=input_size,
 #         patch_size=1,
 #         in_channels=token_dim,
@@ -66,11 +66,11 @@ class Stage2ModelProtocol(Protocol):
 #         class_dropout_prob=0.1,
 #         num_classes=1000,
 #     )
-#     return models
+#     return dmvae_models
 
 # @register_stage2()
 # def DDTS(token_dim: int, input_size: int) -> DiTwDDTHead:
-#     models = DiTwDDTHead(
+#     dmvae_models = DiTwDDTHead(
 #         input_size=input_size,
 #         patch_size=1,
 #         in_channels=token_dim,
@@ -81,7 +81,7 @@ class Stage2ModelProtocol(Protocol):
 #         class_dropout_prob=0.1,
 #         num_classes=1000,
 #     )
-#     return models
+#     return dmvae_models
 
 
 

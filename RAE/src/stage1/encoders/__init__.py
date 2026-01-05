@@ -1,4 +1,4 @@
-"""Encoder registry for stage 1 models."""
+"""Encoder registry for stage 1 dmvae_models."""
 
 from typing import Callable, Dict, Optional, Type, Union
 

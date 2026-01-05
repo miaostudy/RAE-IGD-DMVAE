@@ -178,7 +178,7 @@ def save_checkpoint(
     state = {
         "step": step,
         "epoch": epoch,
-        "models": model.module.state_dict(),
+        "dmvae_models": model.module.state_dict(),
         "ema": ema_model.state_dict(),
         "optimizer": optimizer.state_dict(),
         "scheduler": scheduler.state_dict() if scheduler is not None else None,
@@ -201,7 +201,7 @@ def load_checkpoint(
     disc_scheduler: Optional[LambdaLR],
 ) -> Tuple[int, int]:
     checkpoint = torch.load(path, map_location="cpu")
-    model.module.load_state_dict(checkpoint["models"])
+    model.module.load_state_dict(checkpoint["dmvae_models"])
     ema_model.load_state_dict(checkpoint["ema"])
     optimizer.load_state_dict(checkpoint["optimizer"])
     if scheduler is not None and checkpoint.get("scheduler") is not None:
@@ -440,13 +440,13 @@ def main():
 
             disc_metrics: Dict[str, torch.Tensor] = {}
             if train_disc:
-                # Set models to eval mode and get fresh reconstruction with updated weights
+                # Set dmvae_models to eval mode and get fresh reconstruction with updated weights
                 ddp_model.eval()
                 discriminator.train()
                 for _ in range(disc_updates):
                     disc_optimizer.zero_grad(set_to_none=True)
                     with autocast(**autocast_kwargs):
-                        # Fresh forward pass with updated models weights (no gradient)
+                        # Fresh forward pass with updated dmvae_models weights (no gradient)
                         with torch.no_grad():
                             z_disc = model_woddp.encode(images)
                             recon_disc = model_woddp.decode(z_disc)
@@ -473,7 +473,7 @@ def main():
                     if disc_scheduler is not None:
                         disc_scheduler.step()
                 discriminator.eval()
-                # Set models back to train mode
+                # Set dmvae_models back to train mode
                 ddp_model.train()
 
             epoch_metrics["recon"] += rec_loss.detach()

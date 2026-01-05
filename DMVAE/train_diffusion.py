@@ -14,7 +14,7 @@ import wandb
 from utils.build_dataset import build_dataset
 from diffusion.lightningdit.lightningdit import LightningDiT_models, LightningDiT
 from diffusion.transport import create_transport, Sampler, Transport
-from models.vae import VAE
+from dmvae_models.vae import VAE
 from tap import Tap
 from typing import Optional, Union
 
@@ -227,7 +227,7 @@ def main(args: Args):
     for p in vae.parameters(): p.requires_grad = False
     print(f"[VAE] loaded")
 
-    # Prepare models for training:
+    # Prepare dmvae_models for training:
     update_ema(ema, model.module, decay=0)  # Ensure EMA is initialized with synced weights
     model.train()  # important! This enables embedding dropout for classifier-free guidance
     ema.eval()  # EMA model should always be in eval mode

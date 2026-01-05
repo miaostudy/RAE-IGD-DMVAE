@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch ViT MAE (masked autoencoder) models."""
+"""PyTorch ViT MAE (masked autoencoder) dmvae_models."""
 
 import collections.abc
 import math
@@ -34,14 +34,14 @@ class ViTMAEModelOutput(ModelOutput):
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the models.
+            Sequence of hidden-states at the output of the last layer of the dmvae_models.
         mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Tensor indicating which patches are masked (1) and which are not (0).
         ids_restore (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Tensor containing the original index of the (shuffled) masked patches.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the models at the output of each layer
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the dmvae_models at the output of each layer
             plus the initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
@@ -66,7 +66,7 @@ class ViTMAEDecoderOutput(ModelOutput):
             Pixel reconstruction logits.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the models at the output of each layer
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the dmvae_models at the output of each layer
             plus the initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
@@ -95,7 +95,7 @@ class ViTMAEForPreTrainingOutput(ModelOutput):
             Tensor containing the original index of the (shuffled) masked patches.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the models at the output of each layer
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the dmvae_models at the output of each layer
             plus the initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
@@ -207,7 +207,7 @@ class ViTMAEEmbeddings(nn.Module):
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the models on higher
+        This method allows to interpolate the pre-trained position encodings, to be able to use the dmvae_models on higher
         resolution images.
 
         Source:
@@ -324,13 +324,13 @@ class ViTMAEPatchEmbeddings(nn.Module):
 
         if not interpolate_pos_encoding and (height != self.image_size[0] or width != self.image_size[1]):
             raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match models ({self.image_size[0]}*{self.image_size[1]})."
+                f"Input image size ({height}*{width}) doesn't match dmvae_models ({self.image_size[0]}*{self.image_size[1]})."
             )
         x = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return x
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention ViT->ViTMAE
+# Copied from transformers.dmvae_models.vit.modeling_vit.ViTSelfAttention ViT->ViTMAE
 class ViTMAESelfAttention(nn.Module):
     def __init__(self, config: ViTMAEConfig) -> None:
         super().__init__()
@@ -391,7 +391,7 @@ class ViTMAESelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSdpaSelfAttention ViT->ViTMAE
+# Copied from transformers.dmvae_models.vit.modeling_vit.ViTSdpaSelfAttention ViT->ViTMAE
 class ViTMAESdpaSelfAttention(ViTMAESelfAttention):
     def __init__(self, config: ViTMAEConfig) -> None:
         super().__init__(config)
@@ -423,10 +423,10 @@ class ViTMAESdpaSelfAttention(ViTMAESelfAttention):
         return context_layer, None
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->ViTMAE
+# Copied from transformers.dmvae_models.vit.modeling_vit.ViTSelfOutput with ViT->ViTMAE
 class ViTMAESelfOutput(nn.Module):
     """
-    The residual connection is defined in ViTMAELayer instead of here (as is the case with other models), due to the
+    The residual connection is defined in ViTMAELayer instead of here (as is the case with other dmvae_models), due to the
     layernorm applied before each block.
     """
 
@@ -442,7 +442,7 @@ class ViTMAESelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->ViTMAE
+# Copied from transformers.dmvae_models.vit.modeling_vit.ViTAttention with ViT->ViTMAE
 class ViTMAEAttention(nn.Module):
     def __init__(self, config: ViTMAEConfig) -> None:
         super().__init__()
@@ -462,7 +462,7 @@ class ViTMAEAttention(nn.Module):
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate ViT->ViTMAE
+# Copied from transformers.dmvae_models.vit.modeling_vit.ViTIntermediate ViT->ViTMAE
 class ViTMAEIntermediate(nn.Module):
     def __init__(self, config: ViTMAEConfig) -> None:
         super().__init__()
@@ -479,7 +479,7 @@ class ViTMAEIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTOutput ViT->ViTMAE
+# Copied from transformers.dmvae_models.vit.modeling_vit.ViTOutput ViT->ViTMAE
 class ViTMAEOutput(nn.Module):
     def __init__(self, config: ViTMAEConfig) -> None:
         super().__init__()
@@ -496,7 +496,7 @@ class ViTMAEOutput(nn.Module):
 
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->ViTMAE,VIT->VITMAE
+# Copied from transformers.dmvae_models.vit.modeling_vit.ViTLayer with ViT->ViTMAE,VIT->VITMAE
 class ViTMAELayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -572,8 +572,8 @@ class GeneralDecoder(nn.Module):
         self.trainable_cls_token = nn.Parameter(tensor)
     def interpolate_pos_encoding(self, embeddings: torch.Tensor) -> torch.Tensor:
         """
-        This method is a modified version of the interpolation function for ViT-mae models at the deocder, that
-        allows to interpolate the pre-trained decoder position encodings, to be able to use the models on higher
+        This method is a modified version of the interpolation function for ViT-mae dmvae_models at the deocder, that
+        allows to interpolate the pre-trained decoder position encodings, to be able to use the dmvae_models on higher
         resolution images.
 
         Source:

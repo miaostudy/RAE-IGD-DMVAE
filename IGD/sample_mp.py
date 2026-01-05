@@ -50,7 +50,7 @@ def center_crop_arr(pil_image, image_size):
     return Image.fromarray(arr[crop_y: crop_y + image_size, crop_x: crop_x + image_size])
 
 def define_model(args, nclass, logger=None, size=None):
-    """Define neural network models
+    """Define neural network dmvae_models
     """
 
     args.size = 256
@@ -306,7 +306,7 @@ def main(args):
             # 只有这里需要用到 all_classes.index
             class_labels.append(all_classes.index(sel_class))
     if args.ckpt is None:
-        assert args.model == "DiT-XL/2", "Only DiT-XL/2 models are available for auto-download."
+        assert args.model == "DiT-XL/2", "Only DiT-XL/2 dmvae_models are available for auto-download."
         assert args.image_size in [256, 512]
         assert args.num_classes == 1000
 

@@ -71,7 +71,7 @@ class LightningDDTBlock(nn.Module):
     - RMSNorm
     - SwiGLU
     - No shift AdaLN.
-    Not all of them are used in the final models, please refer to the paper for more details.
+    Not all of them are used in the final dmvae_models, please refer to the paper for more details.
     """
 
     def __init__(
@@ -390,7 +390,7 @@ class DiTwDDTHead(nn.Module):
 
     def forward_with_autoguidance(self, x, t, y, cfg_scale, additional_model_forward, cfg_interval=(0, 1)):
         """
-        Forward pass of LightningDiT, but also contain the forward pass for the additional models
+        Forward pass of LightningDiT, but also contain the forward pass for the additional dmvae_models
         """
         model_out = self.forward(x, t, y)
         ag_model_out = additional_model_forward(x, t, y)

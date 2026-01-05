@@ -151,7 +151,7 @@ def betas_for_alpha_bar(num_diffusion_timesteps, alpha_bar, max_beta=0.999):
 
 class GaussianDiffusion:
     """
-    Utilities for training and sampling diffusion models.
+    Utilities for training and sampling diffusion dmvae_models.
     Original ported from this codebase:
     https://github.com/hojonathanho/diffusion/blob/1e0dceb3b3495bbe19116a5e1b3596cd0706c543/diffusion_tf/diffusion_utils_2.py#L42
     :param betas: a 1-D numpy array of betas for each diffusion timestep,
@@ -322,7 +322,7 @@ class GaussianDiffusion:
                 return x.clamp(-1, 1)
             return x
         
-        # some models' output is already x_start? but some are the score?
+        # some dmvae_models' output is already x_start? but some are the score?
         if self.model_mean_type == ModelMeanType.START_X:
             pred_xstart = process_xstart(model_output)
         else:

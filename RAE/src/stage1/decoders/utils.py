@@ -6,11 +6,11 @@ from transformers.activations import ACT2FN
 class ViTMAEConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ViTMAEModel`]. It is used to instantiate an ViT
-    MAE models according to the specified arguments, defining the models architecture. Instantiating a configuration with
+    MAE dmvae_models according to the specified arguments, defining the dmvae_models architecture. Instantiating a configuration with
     the defaults will yield a similar configuration to that of the ViT
     [facebook/vit-mae-base](https://huggingface.co/facebook/vit-mae-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the models outputs. Read the
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the dmvae_models outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
 
@@ -64,11 +64,11 @@ class ViTMAEConfig(PretrainedConfig):
     >>> # Initializing a ViT MAE vit-mae-base style configuration
     >>> configuration = ViTMAEConfig()
 
-    >>> # Initializing a models (with random weights) from the vit-mae-base style configuration
-    >>> models = ViTMAEModel(configuration)
+    >>> # Initializing a dmvae_models (with random weights) from the vit-mae-base style configuration
+    >>> dmvae_models = ViTMAEModel(configuration)
 
-    >>> # Accessing the models configuration
-    >>> configuration = models.config
+    >>> # Accessing the dmvae_models configuration
+    >>> configuration = dmvae_models.config
     ```"""
 
     model_type = "vit_mae"

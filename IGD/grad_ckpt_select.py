@@ -49,7 +49,7 @@ def center_crop_arr(pil_image, image_size):
     return Image.fromarray(arr[crop_y: crop_y + image_size, crop_x: crop_x + image_size])
 
 def define_model(args, nclass, logger=None, size=None):
-    """Define neural network models
+    """Define neural network dmvae_models
     """
 
     args.size = 256

@@ -7,11 +7,11 @@ import utils.dist as dist
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from tap import Tap
-from models.vae import VAE
-from models.dinodisc import DinoDisc
-from models.patchgan import NLayerDiscriminator
+from dmvae_models.vae import VAE
+from dmvae_models.dinodisc import DinoDisc
+from dmvae_models.patchgan import NLayerDiscriminator
 from utils.build_dataset import build_dataset
-from models.init_param import init_weights
+from dmvae_models.init_param import init_weights
 from utils.lpips import LPIPS
 import torch.nn.functional as F
 from utils.diffaug import DiffAug

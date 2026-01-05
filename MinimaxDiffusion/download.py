@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 """
-Functions for downloading pre-trained DiT models
+Functions for downloading pre-trained DiT dmvae_models
 """
 from torchvision.datasets.utils import download_url
 import torch

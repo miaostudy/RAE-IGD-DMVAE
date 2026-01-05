@@ -2,7 +2,7 @@
 # LICENSE file in the root directory of this source tree.
 
 """
-Runs distributed reconstructions with a pre-trained stage-1 models.
+Runs distributed reconstructions with a pre-trained stage-1 dmvae_models.
 Inputs are loaded from an ImageFolder dataset, processed with center crops,
 and the reconstructed images are saved as .png files alongside a packed .npz.
 """
@@ -173,7 +173,7 @@ if __name__ == "__main__":
     parser.add_argument("--sample-dir", type=str, default="samples", help="Directory to store reconstructed samples.")
     parser.add_argument("--per-proc-batch-size", type=int, default=4, help="Number of images processed per GPU step.")
     parser.add_argument("--num-samples", type=int, default=None, help="Number of samples to reconstruct (defaults to full dataset).")
-    parser.add_argument("--image-size", type=int, default=256, help="Target crop size before feeding images to the models.")
+    parser.add_argument("--image-size", type=int, default=256, help="Target crop size before feeding images to the dmvae_models.")
     parser.add_argument("--num-workers", type=int, default=4, help="Number of dataloader workers per process.")
     parser.add_argument("--global-seed", type=int, default=0, help="Base seed for RNG (adjusted per rank).")
     parser.add_argument("--precision", type=str, choices=["fp32", "bf16"], default="fp32", help="Autocast precision mode.")

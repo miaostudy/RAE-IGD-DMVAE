@@ -69,7 +69,7 @@ def main(args):
     if args.num_samples <= 0:
         raise ValueError("--num_samples must be a positive integer.")
 
-    # Labels to condition the models with:
+    # Labels to condition the dmvae_models with:
     class_labels = [args.class_id] * args.num_samples
 
     # Create sampling noise:
@@ -92,7 +92,7 @@ def main(args):
         guidance_method = guidance_config.get("method", "cfg")
         if guidance_method == "autoguidance":
             guid_model_config = guidance_config.get("guidance_model", None)
-            assert guid_model_config is not None, "Please provide a guidance models config when using autoguidance."
+            assert guid_model_config is not None, "Please provide a guidance dmvae_models config when using autoguidance."
             guid_model: Stage2ModelProtocol = instantiate_from_config(guid_model_config).to(device)
             guid_model.eval()  # important!
             guid_fwd = guid_model.forward
@@ -138,9 +138,9 @@ if __name__ == "__main__":
     # assert mode[:2] != "--", "Usage: program.py <mode> [options]"
     # assert mode in ["ODE", "SDE"], "Invalid mode. Please choose 'ODE' or 'SDE'"
 
-    # parser.add_argument("--models", type=str, default="DDTXL")
-    # parser.add_argument("--guid-models", type=str, default=None)
-    # parser.add_argument("--guid-models-ckpt", type=str, default=None)
+    # parser.add_argument("--dmvae_models", type=str, default="DDTXL")
+    # parser.add_argument("--guid-dmvae_models", type=str, default=None)
+    # parser.add_argument("--guid-dmvae_models-ckpt", type=str, default=None)
     # parser.add_argument("--image-size", type=int,
     #                     choices=[256, 512], default=256)
     # parser.add_argument("--num-classes", type=int, default=1000)
@@ -156,7 +156,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_samples", type=int, default=1,
                         help="Number of samples to generate for the provided class id.")
     # parser.add_argument("--ckpt", type=str, default=None,
-    #                     help="Optional path to a SiT checkpoint (default: auto-download a pre-trained SiT-XL/2 models).")
+    #                     help="Optional path to a SiT checkpoint (default: auto-download a pre-trained SiT-XL/2 dmvae_models).")
 
     args = parser.parse_known_args()[0]
     main(args)

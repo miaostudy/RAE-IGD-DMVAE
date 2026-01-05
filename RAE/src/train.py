@@ -43,7 +43,7 @@ from utils.optim_utils import build_optimizer, build_scheduler
 @torch.no_grad()
 def update_ema(ema_model, model, decay=0.9999):
     """
-    Step the EMA models towards the current models.
+    Step the EMA dmvae_models towards the current dmvae_models.
     """
     ema_params = OrderedDict(ema_model.named_parameters())
     model_params = OrderedDict(model.named_parameters())
@@ -55,7 +55,7 @@ def update_ema(ema_model, model, decay=0.9999):
 
 def requires_grad(model, flag=True):
     """
-    Set requires_grad flag for all parameters in a models.
+    Set requires_grad flag for all parameters in a dmvae_models.
     """
     for p in model.parameters():
         p.requires_grad = flag
@@ -113,7 +113,7 @@ def center_crop_arr(pil_image, image_size):
 
 
 def main(args):
-    """Trains a new SiT models using config-driven hyperparameters."""
+    """Trains a new SiT dmvae_models using config-driven hyperparameters."""
     if not torch.cuda.is_available():
         raise RuntimeError("Training currently requires at least one GPU.")
 
@@ -249,8 +249,8 @@ def main(args):
 
     if args.ckpt is not None:
         checkpoint = torch.load(args.ckpt, map_location="cpu")
-        if "models" in checkpoint:
-            model.load_state_dict(checkpoint["models"])
+        if "dmvae_models" in checkpoint:
+            model.load_state_dict(checkpoint["dmvae_models"])
         if "ema" in checkpoint:
             ema.load_state_dict(checkpoint["ema"])
         opt_state = checkpoint.get("opt")
@@ -322,7 +322,7 @@ def main(args):
     if guidance_scale > 1.0 and guidance_method == "autoguidance":
         guidance_model_cfg = guidance_cfg.get("guidance_model")
         if guidance_model_cfg is None:
-            raise ValueError("Please provide a guidance models config when using autoguidance.")
+            raise ValueError("Please provide a guidance dmvae_models config when using autoguidance.")
         guid_model: Stage2ModelProtocol = instantiate_from_config(guidance_model_cfg).to(device)
         guid_model.eval()
         guid_model_forward = guid_model.forward
@@ -351,7 +351,7 @@ def main(args):
         )
         if guidance_method == "autoguidance":
             if guid_model_forward is None:
-                raise RuntimeError("Guidance models forward is not initialized.")
+                raise RuntimeError("Guidance dmvae_models forward is not initialized.")
             sample_model_kwargs["additional_model_forward"] = guid_model_forward
             model_fn = ema.forward_with_autoguidance
         else:
@@ -415,7 +415,7 @@ def main(args):
             if train_steps % ckpt_every == 0 and train_steps > 0:
                 if rank == 0:
                     checkpoint = {
-                        "models": model.module.state_dict(),
+                        "dmvae_models": model.module.state_dict(),
                         "ema": ema.state_dict(),
                         "opt": opt.state_dict(),
                         "scheduler": schedl.state_dict(),

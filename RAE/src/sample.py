@@ -31,7 +31,7 @@ def sample_one_image(class_labels, save_path, dynamic_seed, misc,device,guidance
     num_classes = misc.get("num_classes", 1000)
     print(num_classes)
     latent_size = misc.get("latent_size", (768, 16, 16))
-    # Labels to condition the models with (feel free to change):
+    # Labels to condition the dmvae_models with (feel free to change):
 
     # Create sampling noise:
     n = len(class_labels)
@@ -52,7 +52,7 @@ def sample_one_image(class_labels, save_path, dynamic_seed, misc,device,guidance
         guidance_method = guidance_config.get("method", "cfg")
         if guidance_method == "autoguidance":
             guid_model_config = guidance_config.get("guidance_model", None)
-            assert guid_model_config is not None, "Please provide a guidance models config when using autoguidance."
+            assert guid_model_config is not None, "Please provide a guidance dmvae_models config when using autoguidance."
             guid_model: Stage2ModelProtocol = instantiate_from_config(guid_model_config).to(device)
             guid_model.eval()  # important!
             guid_fwd = guid_model.forward

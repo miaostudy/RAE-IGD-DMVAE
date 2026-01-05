@@ -13,7 +13,7 @@ class Dinov2withNorm(nn.Module):
         normalize: bool = True,
     ):
         super().__init__()
-        # Support both local paths and HuggingFace models IDs
+        # Support both local paths and HuggingFace dmvae_models IDs
         try:
             self.encoder = Dinov2WithRegistersModel.from_pretrained(dinov2_path, local_files_only=True)
         except (OSError, ValueError, AttributeError):

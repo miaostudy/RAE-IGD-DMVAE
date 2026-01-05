@@ -11,7 +11,7 @@ import math
 import torch_fidelity # type: ignore
 from tap import Tap
 from typing import Literal, Optional
-from models.vae import VAE
+from dmvae_models.vae import VAE
 
 
 class Args(Tap):

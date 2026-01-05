@@ -1,4 +1,4 @@
-"""Encoder registry for stage 2 models."""
+"""Encoder registry for stage 2 dmvae_models."""
 
 
 

@@ -52,7 +52,7 @@ We release three kind of models: RAE decoders, DiT<sup>DH</sup> diffusion transf
 cd RAE
 pip install huggingface_hub
 hf download nyu-visionx/RAE-collections \
-  --local-dir models 
+  --local-dir dmvae_models 
 ```
 
 
@@ -60,7 +60,7 @@ To download specific models, run:
 ```bash
 hf download nyu-visionx/RAE-collections \
   <remote_model_path> \
-  --local-dir models 
+  --local-dir dmvae_models 
 ```
 
 ### Prepare Dataset
@@ -82,7 +82,7 @@ stage_1:
    ckpt: <path_to_ckpt>  
 
 stage_2:
-   target: stage2.models.DDT.DiTwDDTHead
+   target: stage2.dmvae_models.DDT.DiTwDDTHead
    params: { ... }
    ckpt: <path_to_ckpt>  
 
