@@ -1,5 +1,6 @@
 # original code: https://github.com/dyhan0920/PyramidNet-PyTorch/blob/master/train.py
 import os
+import sys
 import time
 import numpy as np
 import torch
@@ -17,6 +18,15 @@ from misc.utils import random_indices, rand_bbox, AverageMeter, accuracy, get_ti
 from efficientnet_pytorch import EfficientNet
 import warnings
 from tqdm import tqdm, trange  # 新增：导入tqdm进度条库
+
+# --- 新增: 尝试导入 DMVAE 中的 dinov2 ---
+try:
+    # 假设 DMVAE 和 IGD 在同一级目录下
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+    from DMVAE.models.dinov2 import vit_small, vit_base, vit_large
+except ImportError:
+    print("Warning: Could not import DMVAE.models.dinov2. ensure DMVAE directory is accessible.")
+# --------------------------------------
 
 device = 'cuda:1' if torch.cuda.is_available() else 'cpu'
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
@@ -71,6 +81,29 @@ def define_model(args, nclass, logger=None, size=None):
         model = CN.ConvNet(channel=args.nch, num_classes=nclass, net_width=128, net_depth=4,
                            net_act='relu', net_norm='instancenorm', net_pooling='avgpooling',
                            im_size=(args.size, args.size))
+    # --- 新增: Dinov2 支持 ---
+    elif args.net_type.startswith('dinov2'):
+        # 针对小图数据集调整 patch_size
+        p_size = 14  # dinov2 默认常用
+        if size <= 32:
+            p_size = 2  # cifar 32x32 太小了，使用极小 patch
+        elif size <= 64:
+            p_size = 4
+
+        # 根据 net_type 选择模型大小，默认为 small
+        if 'base' in args.net_type:
+            model = vit_base(img_size=size, patch_size=p_size, in_chans=args.nch)
+        elif 'large' in args.net_type:
+            model = vit_large(img_size=size, patch_size=p_size, in_chans=args.nch)
+        else:  # default to small
+            model = vit_small(img_size=size, patch_size=p_size, in_chans=args.nch)
+
+        # Dinov2 默认 head 是 Identity，替换为 Linear 分类头
+        model.head = nn.Linear(model.embed_dim, nclass)
+        # 初始化 head 权重
+        nn.init.trunc_normal_(model.head.weight, std=0.02)
+        nn.init.zeros_(model.head.bias)
+    # -------------------------
     else:
         raise Exception('unknown network architecture: {}'.format(args.net_type))
 
@@ -95,7 +128,7 @@ def main(args, logger, repeat=1):
 
     best_acc_l = []
     acc_l = []
-    global trajectories # 训练轨迹
+    global trajectories  # 训练轨迹
     trajectories = []
 
     for i in tqdm(range(repeat), desc="Total Training Repeats", leave=True, unit="repeat"):
@@ -112,7 +145,7 @@ def main(args, logger, repeat=1):
         acc_l.append(acc)
         # save_interval默认是1，即只有repeat = 1的时候才会保存ckpt。
         if len(trajectories) == args.save_interval:
-            n = int(args.start) # start = 0
+            n = int(args.start)  # start = 0
             while os.path.exists(os.path.join(args.ckpt_dir, "replay_buffer_{}.pt".format(n))):
                 n += 1
             save_path = os.path.join(args.ckpt_dir, "replay_buffer_{}.pt".format(n))
@@ -129,11 +162,16 @@ def main(args, logger, repeat=1):
 
 
 def train(args, model, train_loader, val_loader, plotter=None, logger=None):
-    criterion = nn.CrossEntropyLoss().to(device) # 交叉熵
+    criterion = nn.CrossEntropyLoss().to(device)  # 交叉熵
+    # --- 修改：针对 Transformer 类模型，通常 AdamW 效果优于 SGD，这里可以加个判断或保持 SGD ---
+    # 为了保持 minimal change 且符合 train_ckpts 原始逻辑（用于训练代理模型），
+    # 暂时保持 SGD，但对于 dinov2，学习率可能需要调整。
+    # 如果效果不好，建议使用 AdamW: optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     optimizer = optim.SGD(model.parameters(),
                           args.lr,
                           momentum=args.momentum,
                           weight_decay=args.weight_decay)
+    # ---------------------------------------------------------------------------------
 
     cur_epoch, best_acc1, best_acc5, acc1, acc5 = 0, 0, 0, 0, 0
     # 如果有预训练模型的话
@@ -145,7 +183,7 @@ def train(args, model, train_loader, val_loader, plotter=None, logger=None):
     logger(f"Start training with base augmentation and {args.mixup} mixup")
 
     timestamps = []
-    timestamps.append([p.detach().cpu() for p in model.parameters()]) # 模型初始参数
+    timestamps.append([p.detach().cpu() for p in model.parameters()])  # 模型初始参数
     args.epoch_print_freq = 1
 
     print(f'epoch: {cur_epoch}/{args.epochs}')
@@ -160,7 +198,7 @@ def train(args, model, train_loader, val_loader, plotter=None, logger=None):
                                                 logger,
                                                 mixup=args.mixup)
 
-        timestamps.append([p.detach().cpu() for p in model.parameters()]) # 训练了一个epoch后的模型参数
+        timestamps.append([p.detach().cpu() for p in model.parameters()])  # 训练了一个epoch后的模型参数
 
         # 验证一下模型
         if epoch % args.epoch_print_freq == 0:
