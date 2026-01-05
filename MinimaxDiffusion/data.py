@@ -115,7 +115,7 @@ class ImageFolder(datasets.DatasetFolder):
             with open(file_list, 'r') as f:
                 class_name = f.readlines()
             for c in class_name:
-                c = c.split('\n')[0]
+                c = c.strip()
                 classes.append(c)
             classes = classes[cls_from:cls_to]
         else:
