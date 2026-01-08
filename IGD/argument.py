@@ -429,12 +429,12 @@ Evaluation setting
 # Setting evaluation training epochs
 if args.ipc > 0:
     if args.dataset == 'imagenet':
-        # if args.decode_type == 'bound':
-        #     # args.epochs = ipc_epoch(args.ipc, args.factor, args.nclass, bound=args.batch_syn_max)
-        # else:
-            # args.epochs = ipc_epoch(args.ipc, args.factor, args.nclass)
-        # args.epoch_print_freq = args.epochs // 100
-        args.epoch_print_freq = 20
+        if args.decode_type == 'bound':
+            args.epochs = ipc_epoch(args.ipc, args.factor, args.nclass, bound=args.batch_syn_max)
+        else:
+            args.epochs = ipc_epoch(args.ipc, args.factor, args.nclass)
+        args.epoch_print_freq = args.epochs // 100
+        # args.epoch_print_freq = 20
         # pass
     else:
         args.epochs = 1000
