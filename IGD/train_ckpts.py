@@ -378,7 +378,7 @@ def save_checkpoint(save_dir, state, is_best):
 if __name__ == '__main__':
     from misc.utils import Logger
     from argument import args
-
+    print(args.ckpt_dir)
     os.makedirs(args.ckpt_dir, exist_ok=True)
     os.makedirs(args.save_dir, exist_ok=True)
     logger = Logger(args.save_dir)
