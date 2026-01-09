@@ -73,7 +73,7 @@ torchrun --nnode=1 --nproc_per_node=2 --master_port=25678 MinimaxDiffusion/train
 需要重新组织一些imagenet的验证集，变成ImageFolder的结构
 cd到imagenet的路径中
 ```shell
-wget -qO- https://raw.githubusercontent.com/soumith/imagenetloader.torch/master/valprep.sh | bash```
+wget -qO- https://raw.githubusercontent.com/soumith/imagenetloader.torch/master/valprep.sh | bash
 ```
 ```shell
 bash DMVAE/scripts/train_tokenizer.sh
