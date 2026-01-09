@@ -4,19 +4,17 @@ import torch
 import yaml
 import importlib
 from tqdm import tqdm
-import torch.distributed as dist
 
-# 优化 CUDA 设置
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
-
 from torchvision.utils import save_image
 from diffusion import create_diffusion
 from diffusers.models import AutoencoderKL
 from download import find_model
 from models import DiT_models
 import argparse
-from torch.utils.data import DataLoader, DistributedSampler
+from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
 from torchvision import transforms
 from data import ImageFolder, ImageFolder_mp, CIFAR10_mp
 from collections import OrderedDict, defaultdict
@@ -32,16 +30,16 @@ from reparam_module import ReparamModule
 import torch.nn as nn
 
 # --- Path Setup & Imports ---
+# Add project root and RAE source to path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
-sys.path.append(os.path.join(project_root, "RAE", "src"))
+sys.path.append(os.path.join(project_root, "RAE", "src"))  # Allow importing stage1, stage2 directly
 
 os.environ["http_proxy"] = "http://localhost:7890"
 os.environ["https_proxy"] = "http://localhost:7890"
 
-# --- Helper Functions ---
 
-
+# --- Helper Functions for Config instantiation ---
 def get_obj_from_str(string, reload=False):
     module, cls = string.rsplit(".", 1)
     if reload:
@@ -60,12 +58,34 @@ def instantiate_from_config(config):
     return get_obj_from_str(config["target"])(**config.get("params", dict()))
 
 
+def center_crop_arr(pil_image, image_size):
+    """
+    Center cropping implementation from ADM.
+    """
+    while min(*pil_image.size) >= 2 * image_size:
+        pil_image = pil_image.resize(
+            tuple(x // 2 for x in pil_image.size), resample=Image.BOX
+        )
+
+    scale = image_size / min(*pil_image.size)
+    pil_image = pil_image.resize(
+        tuple(round(x * scale) for x in pil_image.size), resample=Image.BICUBIC
+    )
+
+    arr = np.array(pil_image)
+    crop_y = (arr.shape[0] - image_size) // 2
+    crop_x = (arr.shape[1] - image_size) // 2
+    return Image.fromarray(arr[crop_y: crop_y + image_size, crop_x: crop_x + image_size])
+
+
 def define_model(args, nclass, logger=None, size=None):
+    """Define neural network surrogate dmvae_models"""
     args.size = 256
     args.width = 1.0
     args.norm_type = 'instance'
     args.nch = 3
-    if size == None: size = args.size
+    if size == None:
+        size = args.size
 
     if args.net_type == 'resnet':
         model = RN.ResNet(args.spec, args.depth, nclass, norm_type=args.norm_type, size=size, nch=args.nch)
@@ -97,10 +117,11 @@ def rand_ckpts(args):
 
     expert_files = os.listdir(expert_path)
     rand_id1 = 0
-    state = torch.load(os.path.join(expert_path, expert_files[rand_id1]))
-    # print('file name:', expert_path + expert_files[rand_id1])
+    state = torch.load(expert_path + expert_files[rand_id1])
+    print('file name:', expert_path + expert_files[rand_id1])
     ckpts = state[0]
 
+    # Pre-defined index selection logic from original code
     if args.spec == 'woof':
         if args.ckpt_path.startswith('ckpts'):
             if args.net_type == 'convnet6':
@@ -134,11 +155,12 @@ def rand_ckpts(args):
             elif args.net_type == 'resnet':
                 idxs = [0, 8, 27]
 
-    # print('ckpt idxs:',idxs)
+    print('ckpt idxs:', idxs)
     return [ckpts[ii] for ii in idxs]
 
 
-def get_grads(sel_classes, class_labels, sel_class, ckpts, surrogate, device):
+def get_grads(sel_classes, class_labels, sel_class, ckpts, surrogate, device='cuda'):
+    # Setup data for gradients
     criterion_ce = nn.CrossEntropyLoss().to(device)
     correspond_labels = defaultdict(list)
     grads_memory = []
@@ -147,7 +169,6 @@ def get_grads(sel_classes, class_labels, sel_class, ckpts, surrogate, device):
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
     ])
-
     if args.spec == 'cifar10':
         dataset = CIFAR10_mp(args.data_path, train=True, transform=transform,
                              download=True, sel_class=sel_class, return_origin=True)
@@ -157,49 +178,48 @@ def get_grads(sel_classes, class_labels, sel_class, ckpts, surrogate, device):
                                  seed=0, return_origin=True, sel_class=sel_class)
 
     real_loader = DataLoader(dataset, batch_size=200, shuffle=False, num_workers=0, pin_memory=True, drop_last=True)
-
+    print('load real grad memory ')
     for x, ry, y in real_loader:
+        assert torch.all(y == y[0]), "Tensor y contains different values"
         x = x.to(device)
-        y_val = int(y.numpy()[0])
-
+        y = int(y.numpy()[0])
         grads_memory.extend(x.detach().split(1))
-        correspond_labels[y_val] = ry[0].cpu().numpy()
-
+        correspond_labels[y] = ry[0].cpu().numpy()
         if len(grads_memory) > args.grad_ipc:
             break
 
     grads_memory = grads_memory[:args.grad_ipc]
-    y_target = y_val
+    assert len(grads_memory) == args.grad_ipc
+    print('grad memory len', len(grads_memory))
 
     real_gradients = defaultdict(list)
     gap = 50
     gap_idxs = np.arange(0, args.grad_ipc, gap).tolist()
-    correspond_y = correspond_labels[y_target]
+    correspond_y = correspond_labels[y]
     ckpt_grads = []
-
 
     for ii, ckpt in enumerate(ckpts):
         for gi in gap_idxs:
             cur_embd0 = torch.stack(grads_memory[gi:gi + gap]).cpu().numpy()
             cur_embds = torch.from_numpy(cur_embd0).squeeze(1).to(device).requires_grad_(True)
             cur_params = torch.cat([p.data.to(device).reshape(-1) for p in ckpt], 0).requires_grad_(True)
-
             if gi == 0:
                 acc_grad = torch.zeros(cur_params.shape)
-
             real_pred = surrogate(cur_embds, flat_param=cur_params)
-            real_target = torch.tensor([np.ones(len(cur_embds)) * correspond_y], dtype=torch.long,
-                                       device=device).view(-1)
+            # FIX: Use passed device argument instead of args.device
+            real_target = torch.tensor([np.ones(len(cur_embds)) * correspond_y], dtype=torch.long, device=device).view(
+                -1)
             real_loss = criterion_ce(real_pred, real_target)
-
             real_grad = torch.autograd.grad(real_loss, cur_params)[0]
             acc_grad += real_grad.detach().data.cpu()
-
         ckpt_grads.append(acc_grad / len(gap_idxs))
-
-    real_gradients[y_target] = ckpt_grads
-
-    return real_gradients, y_target, correspond_labels
+    real_gradients[y] = ckpt_grads
+    del cur_params, real_grad, grads_memory
+    gc.collect()
+    surrogate.zero_grad()
+    print('end')
+    print('all real memory len', sum(len(lst) for lst in real_gradients.values()))
+    return real_gradients, y, correspond_labels
 
 
 def gm_loss(pg, rg):
@@ -210,9 +230,10 @@ def gm_loss(pg, rg):
 
 def igd_ode_sample(model, z, steps, model_kwargs, device):
     """
-    Euler ODE sampler with IGD gradient guidance + AMP.
+    Euler ODE sampler with IGD gradient guidance for Flow Matching models.
     """
     x = z
+    # Linear schedule for Flow Matching: 1.0 (noise) -> 0.0 (data)
     ts = torch.linspace(1.0, 0.0, steps + 1, device=device)
 
     decoder, surrogate, ckpts, real_grad, label_idx, criterion, repeat, repeat_init, gm_scale = model_kwargs[
@@ -220,73 +241,67 @@ def igd_ode_sample(model, z, steps, model_kwargs, device):
     neg_e = model_kwargs.get('neg_e', 0.0)
     low, high = model_kwargs.get('low', 0), model_kwargs.get('high', 1000)
 
-    for i in tqdm(range(steps), desc="ODE Sampling", disable=dist.get_rank() != 0):
+    for i in tqdm(range(steps), desc="ODE Sampling"):
         t_curr = ts[i]
         t_next = ts[i + 1]
-        dt = t_next - t_curr
+        dt = t_next - t_curr  # Negative dt
 
         t_in = torch.full((x.shape[0],), t_curr, device=device, dtype=torch.float)
 
-        # 1. Forward model to get Velocity (Use AMP)
-        with torch.cuda.amp.autocast():
-            if 'cfg_scale' in model_kwargs and model_kwargs['cfg_scale'] > 1.0:
-                v_pred = model.forward_with_cfg(x, t_in, model_kwargs['y'], model_kwargs['cfg_scale'])
-            else:
-                v_pred = model(x, t_in, model_kwargs['y'])
+        # 1. Forward model to get Velocity
+        if 'cfg_scale' in model_kwargs and model_kwargs['cfg_scale'] > 1.0:
+            v_pred = model.forward_with_cfg(x, t_in, model_kwargs['y'], model_kwargs['cfg_scale'])
+        else:
+            v_pred = model(x, t_in, model_kwargs['y'])
 
         # 2. IGD Guidance
+        # Scale t to 0-1000 for config consistency
         t_check = t_curr.item() * 1000
         should_guide = (t_check >= low) and (t_check <= high)
+
         guidance_grad = torch.zeros_like(x)
 
         if should_guide and gm_scale > 0:
-            with torch.enable_grad():  # Gradient calculation needs enabled grad
-                with torch.cuda.amp.autocast():  # Use AMP for heavy gradient graph
-                    x_in = x.detach().requires_grad_(True)
+            with torch.enable_grad():
+                x_in = x.detach().requires_grad_(True)
 
-                    if 'cfg_scale' in model_kwargs and model_kwargs['cfg_scale'] > 1.0:
-                        v_pred_grad = model.forward_with_cfg(x_in, t_in, model_kwargs['y'], model_kwargs['cfg_scale'])
-                    else:
-                        v_pred_grad = model(x_in, t_in, model_kwargs['y'])
+                # Re-calculate v for gradient tracking
+                if 'cfg_scale' in model_kwargs and model_kwargs['cfg_scale'] > 1.0:
+                    v_pred_grad = model.forward_with_cfg(x_in, t_in, model_kwargs['y'], model_kwargs['cfg_scale'])
+                else:
+                    v_pred_grad = model(x_in, t_in, model_kwargs['y'])
 
-                    # x0 estimation: x0 = xt - t * v
-                    x_0_est = x_in - t_curr * v_pred_grad
+                # Flow Matching: x0 = x_t - t * v (approximate)
+                x_0_est = x_in - t_curr * v_pred_grad
 
-                    # Decode to image space
-                    pseudo_imgs = decoder.decode(x_0_est)
+                # Decode
+                pseudo_imgs = decoder.decode(x_0_est)
 
-                    # Gradient against Surrogate
-                    pseudo_target = torch.tensor([np.ones(len(pseudo_imgs)) * label_idx], dtype=torch.long,
-                                                 device=device).view(-1)
+                # Gradient against Surrogate
+                pseudo_target = torch.tensor([np.ones(len(pseudo_imgs)) * label_idx], dtype=torch.long,
+                                             device=device).view(-1)
 
-                    total_gm_loss = 0
-                    for idx, ckpt in enumerate(ckpts):
-                        # Move params to GPU only when needed
-                        cur_params = torch.cat([p.data.to(device).reshape(-1) for p in ckpt], 0).requires_grad_(True)
-                        real_g = real_grad[idx].to(device)
+                total_gm_loss = 0
+                for idx, ckpt in enumerate(ckpts):
+                    cur_params = torch.cat([p.data.to(device).reshape(-1) for p in ckpt], 0).requires_grad_(True)
+                    real_g = real_grad[idx].to(device)
 
-                        pseudo_pred = surrogate(pseudo_imgs, flat_param=cur_params)
-                        pseudo_loss_val = criterion(pseudo_pred, pseudo_target)
+                    pseudo_pred = surrogate(pseudo_imgs, flat_param=cur_params)
+                    pseudo_loss_val = criterion(pseudo_pred, pseudo_target)
 
-                        pseudo_g = torch.autograd.grad(pseudo_loss_val, cur_params, create_graph=True)[0]
-                        total_gm_loss += gm_loss(pseudo_g, real_g)
+                    pseudo_g = torch.autograd.grad(pseudo_loss_val, cur_params, create_graph=True)[0]
+                    total_gm_loss += gm_loss(pseudo_g, real_g)
 
-                        # Free up
-                        del cur_params, pseudo_g
+                total_gm_loss /= len(ckpts)
 
-                    total_gm_loss /= len(ckpts)
-
-                # End of autocast, calculate gradient of x_in
                 guidance_grad = torch.autograd.grad(total_gm_loss, x_in)[0]
 
-                # Cleanup graph
-                del x_in, x_0_est, pseudo_imgs, pseudo_pred, total_gm_loss
-                # torch.cuda.empty_cache() # Optional: frequent empty_cache slows down, use only if critical
-
         if should_guide:
+            # Heuristic scaling for Flow Matching velocity adjustment
             v_norm = (v_pred.detach() ** 2).mean().sqrt()
             g_norm = (guidance_grad ** 2).mean().sqrt() + 1e-6
             adaptive_scale = (v_norm / g_norm) * gm_scale
+
             v_pred = v_pred + guidance_grad * adaptive_scale
 
         x = x + v_pred * dt
@@ -301,39 +316,31 @@ class DecoderWrapper:
     def decode(self, z):
         return self.decode_fn(z)
 
+    def decode_custom(self, z):
+        return self.decode_fn(z)
+
 
 def main(args):
-    # --- Distributed Init ---
-    if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
-        dist.init_process_group("nccl")
-        rank = dist.get_rank()
-        world_size = dist.get_world_size()
-        local_rank = int(os.environ["LOCAL_RANK"])
-        torch.cuda.set_device(local_rank)
-        device = torch.device("cuda", local_rank)
-        if rank == 0:
-            print(f"Distributed Init: World Size {world_size}")
-    else:
-        rank = 0
-        world_size = 1
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print("Running in single process mode.")
+    torch.manual_seed(args.seed)
 
-    # Seed
-    torch.manual_seed(args.seed + rank)  # Seed offset by rank
-    np.random.seed(args.seed + rank)
+    # FIX: Use args.device if specified, otherwise default to logic
+    device = args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
     # --- Config Loading ---
     config = None
     if args.config and os.path.exists(args.config):
-        if rank == 0: print(f"Loading config from {args.config}")
+        print(f"Loading config from {args.config}")
         with open(args.config, 'r') as f:
             config = yaml.safe_load(f)
 
+        # --- HOTFIX: Patch Incorrect Config Paths ---
+        # Fix: 'stage2.dmvae_models' -> 'stage2.models'
         if 'stage_2' in config and 'target' in config['stage_2']:
             target_str = config['stage_2']['target']
             if 'stage2.dmvae_models' in target_str:
                 new_target = target_str.replace('stage2.dmvae_models', 'stage2.models')
+                print(f"Hotfix applied: Renaming target {target_str} -> {new_target}")
                 config['stage_2']['target'] = new_target
 
     # --- Class Selection Logic ---
@@ -345,6 +352,7 @@ def main(args):
         sel_classes = sel_classes[cls_from:cls_to]
         class_labels = [int(x) for x in sel_classes]
     else:
+        # Assuming imagenet style
         with open('IGD/misc/class_indices.txt', 'r') as fp:
             all_classes = [line.strip() for line in fp.readlines()]
 
@@ -366,21 +374,27 @@ def main(args):
         sel_classes = sel_classes_raw[cls_from:cls_to]
         class_labels = [all_classes.index(c) for c in sel_classes]
 
-    # --- Model Initialization (Load to specific device) ---
+    # --- Model Initialization ---
     model_type = args.model_type
 
     if model_type == 'rae' and config:
-        if rank == 0: print("Initializing RAE from config...")
+        # RAE Initialization from Config
+        print("Initializing RAE from config...")
+        # 1. Init Stage 1 (RAE / Autoencoder)
         rae = instantiate_from_config(config['stage_1']).to(device).eval()
         if args.rae_ckpt:
+            print(f"Loading RAE checkpoint: {args.rae_ckpt}")
             rae.load_state_dict(torch.load(args.rae_ckpt, map_location='cpu'), strict=False)
 
+        # 2. Init Stage 2 (DiT / DDT)
         model = instantiate_from_config(config['stage_2']).to(device).eval()
 
+        # Load DiT checkpoint
         dit_ckpt_path = args.dit_ckpt if args.dit_ckpt else config['stage_2'].get('ckpt')
         if dit_ckpt_path:
-            if rank == 0: print(f"Loading DiT checkpoint: {dit_ckpt_path}")
+            print(f"Loading DiT checkpoint: {dit_ckpt_path}")
             ckpt = torch.load(dit_ckpt_path, map_location='cpu')
+            # Handle different checkpoint formats
             if 'model' in ckpt:
                 model.load_state_dict(ckpt['model'])
             elif 'ema' in ckpt:
@@ -391,16 +405,18 @@ def main(args):
         def decode_fn(z):
             return rae.decode(z)
 
+        # Override latent size from config if available
         if 'misc' in config and 'latent_size' in config['misc']:
             c, h, w = config['misc']['latent_size']
-            latent_size = h * 16
-            latent_size = args.image_size // 16
+            latent_size = h * 16  # Assuming latent size refers to [C, H, W] and we need spatial dim
+            # RAE usually: 256 image -> 16 latent spatial (256/16)
+            latent_size = args.image_size // 16  # Fallback to calculation
 
     elif model_type == 'dmvae':
         from DMVAE.diffusion.lightningdit.lightningdit import LightningDiT as DMVAE_DiT
         from DMVAE.dmvae_models.vae import VAE as DMVAE_VAE
 
-        if rank == 0: print("Initializing DMVAE...")
+        print("Initializing DMVAE...")
         vae = DMVAE_VAE(model_size='large', z_channels=32).to(device).eval()
         if args.vae_ckpt_path:
             vae.load_pretrained(args.vae_ckpt_path)
@@ -423,7 +439,8 @@ def main(args):
             return vae.decode(z_unorm)
 
     else:
-        if rank == 0: print("Initializing standard DiT (IGD mode)...")
+        # Original IGD / DiT logic
+        print("Initializing standard DiT (IGD mode)...")
         latent_size = args.image_size // 8
         model = DiT_models[args.model](input_size=latent_size, num_classes=args.num_classes).to(device)
         state_dict = find_model(args.ckpt or f"DiT-XL-2-{args.image_size}x{args.image_size}.pt")
@@ -436,50 +453,34 @@ def main(args):
         def decode_fn(z):
             return vae.decode(z / 0.18215).sample
 
-    # --- Resources ---
+    # --- Prepare Resources for Sampling ---
     surrogate = define_model(args, args.target_nclass).to(device)
     surrogate = ReparamModule(surrogate)
     surrogate.eval()
-
-    if rank == 0:
-        print(f"Loading Surrogate Checkpoints from {args.ckpt_path}...")
     ckpts = rand_ckpts(args)
     criterion_ce = nn.CrossEntropyLoss().to(device)
     decoder_obj = DecoderWrapper(decode_fn)
 
-    # --- Distributed Sampling Loop ---
-    # Each rank generates a subset of total images
-    # Assuming args.num_samples is TOTAL samples desired.
-    # samples_per_rank = args.num_samples // world_size (Simplified)
-    samples_per_rank = (args.num_samples + world_size - 1) // world_size
-
-    batch_size = 1  # Keep 1 for OOM safety
-
+    # --- Sampling Loop ---
+    batch_size = 1
     for class_label, sel_class in zip(class_labels, sel_classes):
-        if rank == 0:
-            os.makedirs(os.path.join(args.save_dir, sel_class), exist_ok=True)
-            print(f"Generating class: {sel_class} (idx {class_label})")
+        os.makedirs(os.path.join(args.save_dir, sel_class), exist_ok=True)
+        print(f"Generating class: {sel_class} (idx {class_label})")
 
-        # Barrier to ensure directory exists
-        if world_size > 1: dist.barrier()
-
-        # Calculate gradients (per rank to avoid broadcast complexity, overhead is low)
+        # Pass device explicity
         real_gradients, cur_cls, correspond_labels = get_grads(sel_classes, class_labels, sel_class, ckpts, surrogate,
                                                                device)
+        assert class_label == cur_cls
 
-        # Loop for local samples
-        for i in range(samples_per_rank):
-            global_idx = i * world_size + rank
-            if global_idx >= args.num_samples:
-                break
-
-            # Model specific configs
+        for shift in tqdm(range(args.num_samples // batch_size)):
+            # Determine channels and spatial dim
             if model_type == 'igd':
                 C, H, W = 4, latent_size, latent_size
             elif model_type == 'rae' and config and 'misc' in config:
                 C, H, W = config['misc']['latent_size']
             elif hasattr(model, 'in_channels'):
-                C = model.in_channels; H = W = latent_size
+                C = model.in_channels
+                H = W = latent_size
             else:
                 C, H, W = 32, latent_size, latent_size
 
@@ -496,11 +497,10 @@ def main(args):
             model_kwargs = dict(y=y, cfg_scale=args.cfg_scale, gm_resource=gm_resource, gen_type='igd', low=args.low,
                                 high=args.high, neg_e=args.dev_scale)
 
-            # Sample with AMP
+            # Sample
             if model_type == 'igd':
-                with torch.cuda.amp.autocast():
-                    samples = diffusion.p_sample_loop(model.forward_with_cfg, z.shape, z, clip_denoised=False,
-                                                      model_kwargs=model_kwargs, progress=False, device=device)
+                samples = diffusion.p_sample_loop(model.forward_with_cfg, z.shape, z, clip_denoised=False,
+                                                  model_kwargs=model_kwargs, progress=False, device=device)
             else:
                 samples = igd_ode_sample(model, z, args.num_sampling_steps, model_kwargs, device)
 
@@ -509,31 +509,30 @@ def main(args):
 
             samples = decode_fn(samples)
 
-            # Save: Unique name per rank/index
-            save_name = f"{global_idx + args.total_shift}.png"
-            save_path = os.path.join(args.save_dir, sel_class, save_name)
-            save_image(samples[0], save_path, normalize=True, value_range=(-1, 1))
-
-            if rank == 0:
-                print(f"Rank {rank}: Saved {save_name}")
+            for i, img in enumerate(samples):
+                save_image(img,
+                           os.path.join(args.save_dir, sel_class, f"{i + shift * batch_size + args.total_shift}.png"),
+                           normalize=True, value_range=(-1, 1))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default='RAE/configs/stage2/sampling/ImageNet256/DiTDHXL-DINOv2-B.yaml')
+    parser.add_argument("--config", type=str, default='RAE/configs/stage2/sampling/ImageNet256/DiTDHXL-DINOv2-B.yaml',
+                        help="Path to YAML config file")
     parser.add_argument("--model_type", type=str, choices=['igd', 'rae', 'dmvae'], default='igd')
 
-    # Checkpoints
+    # RAE / DMVAE specifics
     parser.add_argument("--rae_ckpt", type=str, default=None)
     parser.add_argument("--dit_ckpt", type=str, default=None)
     parser.add_argument("--vae_ckpt_path", type=str, default=None)
-
-    # Params
     parser.add_argument("--dinov2_path", type=str, default=None)
     parser.add_argument("--latent_mean", type=float, default=0.0)
     parser.add_argument("--latent_scale", type=float, default=1.0)
+    # Decoder config specific path
+    parser.add_argument("--decoder_config_path", type=str, default=None,
+                        help="Explicit path to decoder config if needed")
 
-    # Standard IGD
+    # Standard IGD args
     parser.add_argument("--model", type=str, default="DiT-XL/2")
     parser.add_argument("--vae", type=str, default="mse")
     parser.add_argument("--image-size", type=int, default=256)
@@ -561,8 +560,7 @@ if __name__ == "__main__":
     parser.add_argument("--high", type=int, default=800)
     parser.add_argument("--ckpt_path", type=str, required=True)
     parser.add_argument("--repeat", type=int, required=True)
-
-    # device argument is no longer needed for torchrun, handled automatically
+    parser.add_argument("--device", type=str, default='cuda:1')
 
     args = parser.parse_args()
     main(args)
