@@ -11,6 +11,7 @@ import os
 import sys
 import yaml
 import importlib
+import matplotlib.pyplot as plt
 
 # --- Path Setup ---
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -70,13 +71,12 @@ def extract_latents(model, data_loader, device):
     latents_list = []
     labels_list = []
 
-    # Limit batches to save time if dataset is huge
     max_batches = 200
     for i, (x, y) in enumerate(tqdm(data_loader, desc="Extracting")):
         x = x.to(device)
         z = model.encode(x)
-        if isinstance(z, tuple): z = z[0]  # Handle VAE posterior
-        if hasattr(z, 'sample'): z = z.mode()  # Handle distribution
+        if isinstance(z, tuple): z = z[0]
+        if hasattr(z, 'sample'): z = z.mode()
 
         latents_list.append(z.cpu())
         labels_list.append(y)
@@ -122,14 +122,9 @@ def train_proxy(latents, labels, device, num_classes=1000, epochs=10):
 
 
 def train_pixel_classifier_head(model, data_loader, device, epochs=5):
-    """
-    重要修复：训练 ResNet 的最后一层，使其具备该数据集的判别能力。
-    """
     print(f"\n[Step 2] Training Pixel Classifier Head (Linear Probe)...")
-    # Freeze backbone
     for param in model.parameters():
         param.requires_grad = False
-    # Unfreeze head
     for param in model.fc.parameters():
         param.requires_grad = True
 
@@ -137,7 +132,6 @@ def train_pixel_classifier_head(model, data_loader, device, epochs=5):
     criterion = nn.CrossEntropyLoss()
 
     model.train()
-    # Limit batches for speed
     max_batches = 100
 
     for epoch in range(epochs):
@@ -149,8 +143,6 @@ def train_pixel_classifier_head(model, data_loader, device, epochs=5):
             if i >= max_batches: break
             x, y = x.to(device), y.to(device)
 
-            # Normalize for ResNet (assuming x is [0,1] or standard normalized,
-            # but usually fine-tuning handles shift)
             optimizer.zero_grad()
             output = model(x)
             loss = criterion(output, y)
@@ -167,146 +159,145 @@ def train_pixel_classifier_head(model, data_loader, device, epochs=5):
 
 
 # ==========================================
-# 4. Sanity Check with Detailed Analysis
+# 4. Correlation Experiment (Noise Sweep)
 # ==========================================
-def run_sanity_check(rae_model, latent_proxy, pixel_classifier, val_loader, device, save_dir="./results/sanity_check"):
-    print("\n[Step 3] Running Sanity Check: Latent Guidance -> Pixel Eval")
+def run_correlation_experiment(rae_model, latent_proxy, pixel_classifier, val_loader, device,
+                               save_dir="./results/correlation"):
+    print("\n[Step 3] Running Correlation Experiment: Latent Acc vs Pixel Acc")
     os.makedirs(save_dir, exist_ok=True)
 
     rae_model.eval()
     latent_proxy.eval()
     pixel_classifier.eval()
 
-    # Get one batch
-    x_real, y_real = next(iter(val_loader))
-    x_real, y_real = x_real.to(device), y_real.to(device)
+    # 1. Collect all validation latents first (to speed up loop)
+    #    We extract z_real for the whole validation set (or a large subset)
+    print("  Encoding Validation Set...")
+    all_z = []
+    all_y = []
+    max_val_batches = 50  # Adjust based on memory
 
-    # Limit to 16 samples for clear visualization
-    B = min(16, x_real.shape[0])
-    x_real, y_real = x_real[:B], y_real[:B]
-
-    # 1. Encode
     with torch.no_grad():
-        z_real = rae_model.encode(x_real)
-        if isinstance(z_real, tuple): z_real = z_real[0]
-        if hasattr(z_real, 'sample'): z_real = z_real.mode()
+        for i, (x, y) in enumerate(tqdm(val_loader, desc="Encoding")):
+            if i >= max_val_batches: break
+            x = x.to(device)
+            z = rae_model.encode(x)
+            if isinstance(z, tuple): z = z[0]
+            if hasattr(z, 'sample'): z = z.mode()
+            all_z.append(z.cpu())
+            all_y.append(y)
 
-    # 2. Add Noise (Start Point)
-    # Reduced noise scale to 0.3 to keep it closer to manifold for this test
-    noise = torch.randn_like(z_real) * 2
-    z_noisy = z_real + noise
+    all_z = torch.cat(all_z, dim=0).to(device)  # Keep on GPU for speed if fits
+    all_y = torch.cat(all_y, dim=0).to(device)
+    print(f"  Validation Subsample Size: {len(all_y)}")
 
-    # 3. Optimize (Guidance)
-    z_opt = z_noisy.clone().detach().requires_grad_(True)
-    # Use SGD with momentum or Adam for better convergence
-    optimizer_z = optim.Adam([z_opt], lr=0.01)
+    # 2. Define Noise Scales (Sweep)
+    # Range: 0 (clean) to large noise (random)
+    noise_scales = [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 7.0, 10.0]
 
-    print("  Optimizing Latents...")
-    for step in range(50):  # Increased steps, lowered LR
-        optimizer_z.zero_grad()
-        logits = latent_proxy(z_opt)
+    results = {
+        "noise": [],
+        "latent_acc": [],
+        "pixel_acc": []
+    }
 
-        # Target Class Guidance
-        # loss = -logits[range(B), y_real].sum()
-        # Better: Cross Entropy to target
-        # loss = nn.CrossEntropyLoss()(logits, y_real)
-        target_logits = logits.gather(1, y_real.view(-1, 1))
-        loss = -target_logits.mean()
-
-        loss.backward()
-        optimizer_z.step()
-
-    # 4. Decode
-    with torch.no_grad():
-        x_noisy = rae_model.decode(z_noisy)
-        x_opt = rae_model.decode(z_opt)
-        x_recon_real = rae_model.decode(z_real)  # For upper bound check
-
-        # Clamp to [0,1] assuming RAE output is raw
-        # If RAE output is [-1, 1], convert to [0, 1] for visualization and ResNet
-        if x_opt.min() < -0.2:  # Simple heuristic
-            x_noisy = (x_noisy + 1) / 2
-            x_opt = (x_opt + 1) / 2
-            x_real_norm = (x_real + 1) / 2  # if real data was normalized to -1,1
-            x_recon_real = (x_recon_real + 1) / 2
-        else:
-            x_real_norm = x_real
-
-        x_noisy = torch.clamp(x_noisy, 0, 1)
-        x_opt = torch.clamp(x_opt, 0, 1)
-        x_recon_real = torch.clamp(x_recon_real, 0, 1)
-        x_real_norm = torch.clamp(x_real_norm, 0, 1)
-
-    # 5. Evaluate
-    # Preprocessing for ResNet (Standard ImageNet mean/std)
+    # Preprocessing for ResNet
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
     def prep(x):
+        x = torch.clamp(x, 0, 1)  # Ensure valid image range
         return torch.stack([normalize(img) for img in x])
 
-    with torch.no_grad():
-        # Latent Confidence
-        p_conf_noisy = torch.softmax(latent_proxy(z_noisy), 1).gather(1, y_real.view(-1, 1))
-        p_conf_opt = torch.softmax(latent_proxy(z_opt), 1).gather(1, y_real.view(-1, 1))
+    print("\n  Starting Noise Sweep...")
+    print(f"  {'Noise':<6} | {'Latent Acc':<10} | {'Pixel Acc':<10} | {'Ratio (P/L)':<10}")
+    print("-" * 50)
 
-        # Pixel Confidence
-        res_conf_noisy = torch.softmax(pixel_classifier(prep(x_noisy)), 1).gather(1, y_real.view(-1, 1))
-        res_conf_opt = torch.softmax(pixel_classifier(prep(x_opt)), 1).gather(1, y_real.view(-1, 1))
-        res_conf_real = torch.softmax(pixel_classifier(prep(x_recon_real)), 1).gather(1, y_real.view(-1, 1))
+    for scale in noise_scales:
+        # Add noise
+        noise = torch.randn_like(all_z) * scale
+        z_noisy = all_z + noise
 
-    # 6. Analysis & Logging
-    improved_count = 0
-    print(
-        f"\n{'Idx':<3} | {'Class':<5} | {'L-Conf (N->O)':<15} | {'P-Conf (N->O)':<15} | {'Real Recon P-Conf':<15} | {'L2(z) Imp':<10} | {'Status'}")
-    print("-" * 100)
+        # --- Measure Latent Accuracy ---
+        with torch.no_grad():
+            # Batch processing to avoid OOM
+            l_correct = 0
+            p_correct = 0
+            total = len(all_y)
+            batch_size = 64
 
-    for i in range(B):
-        # Metrics
-        l_n = p_conf_noisy[i].item()
-        l_o = p_conf_opt[i].item()
-        p_n = res_conf_noisy[i].item()
-        p_o = res_conf_opt[i].item()
-        p_r = res_conf_real[i].item()  # How good is the decoder itself?
+            for i in range(0, total, batch_size):
+                z_batch = z_noisy[i:i + batch_size]
+                y_batch = all_y[i:i + batch_size]
 
-        # Did we move closer to z_real?
-        dist_n = torch.norm(z_noisy[i] - z_real[i]).item()
-        dist_o = torch.norm(z_opt[i] - z_real[i]).item()
-        dist_improved = (dist_o < dist_n)
+                # Latent Pred
+                l_logits = latent_proxy(z_batch)
+                l_pred = l_logits.argmax(dim=1)
+                l_correct += (l_pred == y_batch).sum().item()
 
-        status = "✅ IMPROVED" if p_o > p_n else "❌ DEGRADED"
-        if p_o > p_n: improved_count += 1
+                # --- Measure Pixel Accuracy ---
+                # Decode
+                x_recon = rae_model.decode(z_batch)
 
-        print(
-            f"{i:<3} | {y_real[i].item():<5} | {l_n:.2f} -> {l_o:.2f}    | {p_n:.2f} -> {p_o:.2f}    | {p_r:.2f}            | {dist_improved!s:<10} | {status}")
+                # Handle RAE output range (assuming ~[0,1] or [-1,1])
+                # Heuristic: if mean < 0, shift it.
+                # (Ideally use same logic as training, here we assume [-1,1] -> [0,1])
+                # x_recon = (x_recon + 1) / 2.0
+                # OR if your model outputs [0,1] directly (like sigmoid), comment above line.
+                # Based on previous output, check if clamping is enough.
+                # Let's try standard un-normalization if we knew it.
+                # For safety, let's just clamp if it looks like [0,1], or shift if [-1,1]
+                if x_recon.min() < -0.2:
+                    x_recon = (x_recon + 1) / 2.0
 
-    print(f"\nSummary: {improved_count}/{B} samples improved in Pixel Space.")
+                # Pixel Pred
+                p_logits = pixel_classifier(prep(x_recon))
+                p_pred = p_logits.argmax(dim=1)
+                p_correct += (p_pred == y_batch).sum().item()
 
-    # 7. Visualization
-    # Grid: [Real Image] [Noisy Recon] [Optimized Recon] [Real Latent Recon (Upper Bound)]
-    row_list = []
-    for i in range(B):
-        row = torch.stack([x_real_norm[i], x_noisy[i], x_opt[i], x_recon_real[i]])
-        row_list.append(row)
+            l_acc = l_correct / total
+            p_acc = p_correct / total
 
-    vis_tensor = torch.cat(row_list, dim=0)
-    save_path = os.path.join(save_dir, "comparison.png")
-    save_image(vis_tensor, save_path, nrow=4, padding=2)
-    print(f"\nVisualization saved to {save_path}")
-    print("Columns: [Real] [Noisy (Start)] [Optimized (End)] [Decoder Reconstruction]")
+            results["noise"].append(scale)
+            results["latent_acc"].append(l_acc)
+            results["pixel_acc"].append(p_acc)
 
-    # Final Conclusion Logic
-    avg_p_improvement = (res_conf_opt - res_conf_noisy).mean().item()
-    print(f"Average Pixel Confidence Improvement: {avg_p_improvement:.4f}")
+            ratio = p_acc / (l_acc + 1e-6)
+            print(f"  {scale:<6.1f} | {l_acc:<10.4f} | {p_acc:<10.4f} | {ratio:<10.4f}")
 
-    if improved_count > B * 0.7:
-        print("\n✅ 结论：Latent引导有效！")
-    elif avg_p_improvement > 0.1:
-        print("\n⚠️ 结论：均值上有提升，但个例不稳定。")
+    # 3. Plotting
+    plt.figure(figsize=(10, 6))
+    plt.plot(results["latent_acc"], results["pixel_acc"], 'o-', linewidth=2, color='blue',
+             label='Correlation Trajectory')
+
+    # Add annotations for noise levels
+    for i, txt in enumerate(results["noise"]):
+        plt.annotate(f"n={txt}", (results["latent_acc"][i], results["pixel_acc"][i]), xytext=(5, 5),
+                     textcoords='offset points')
+
+    plt.title(f"Latent Accuracy vs. Pixel Accuracy Correlation\n(Noise Sweep 0.0 -> 10.0)", fontsize=14)
+    plt.xlabel("Latent Proxy Accuracy", fontsize=12)
+    plt.ylabel("Pixel Classifier (ResNet) Accuracy", fontsize=12)
+    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.xlim(0, 1.05)
+    plt.ylim(0, 1.05)
+    plt.plot([0, 1], [0, 1], 'r--', alpha=0.5, label="Perfect 1:1")  # Reference line
+    plt.legend()
+
+    plot_path = os.path.join(save_dir, "correlation_plot.png")
+    plt.savefig(plot_path)
+    print(f"\nPlot saved to {plot_path}")
+
+    # 4. Conclusion
+    correlation = np.corrcoef(results["latent_acc"], results["pixel_acc"])[0, 1]
+    print(f"Pearson Correlation Coefficient: {correlation:.4f}")
+
+    if correlation > 0.9:
+        print("\n✅ 结论：极强正相关！(Pearson > 0.9)")
+        print("证明：Latent空间的分类能力可以直接映射到Pixel空间的分类能力。")
+    elif correlation > 0.7:
+        print("\n⚠️ 结论：强相关，但存在非线性衰减。")
     else:
-        print("\n❌ 结论：Latent引导未能有效迁移到Pixel空间。")
-        print("建议排查：")
-        print("1. Decoder是否完全破坏了导致分类的关键纹理？(查看 comparison.png 第3列和第4列)")
-        print("2. Latent Proxy 是否对抗攻击了 Decoder？(即Latent分很高，但图是乱的)")
+        print("\n❌ 结论：相关性较弱。")
 
 
 # ==========================================
@@ -320,38 +311,33 @@ if __name__ == "__main__":
 
     # 1. Load Data
     _, train_loader, val_loader, num_classes = load_data(args)
-    print(f"Classes: {num_classes}, Train: {len(train_loader.dataset)}")
 
     # 2. Load RAE
     print("Loading RAE...")
     if args.config and os.path.exists(args.config):
         with open(args.config, 'r') as f:
             config = yaml.safe_load(f)
-        # Hotfix config path if needed
         if 'stage_2' in config and 'stage2.dmvae_models' in config['stage_2'].get('target', ''):
             config['stage_2']['target'] = config['stage_2']['target'].replace('stage2.dmvae_models', 'stage2.models')
 
     rae = instantiate_from_config(config['stage_1']).to(device).eval()
     if args.rae_ckpt:
         print(f"Loading RAE: {args.rae_ckpt}")
-        # Relaxed loading
         st = torch.load(args.rae_ckpt, map_location='cpu')
         if 'model' in st: st = st['model']
         rae.load_state_dict(st, strict=False)
 
     # 3. Setup Models
-    # A. Latent Proxy
+    # A. Latent Proxy (Train from scratch)
     latents, labels = extract_latents(rae, train_loader, device)
     latent_proxy = train_proxy(latents, labels, device, num_classes=num_classes, epochs=10)
 
-    # B. Pixel Classifier (The Judge)
+    # B. Pixel Classifier (Train head from scratch)
     print("Initializing Pixel Classifier (ResNet18)...")
     pixel_classifier = models.resnet18(pretrained=True)
-    pixel_classifier.fc = nn.Linear(512, num_classes)  # New head
+    pixel_classifier.fc = nn.Linear(512, num_classes)
     pixel_classifier.to(device)
-
-    # CRITICAL: Train the judge!
     pixel_classifier = train_pixel_classifier_head(pixel_classifier, train_loader, device, epochs=3)
 
-    # 4. Run Check
-    run_sanity_check(rae, latent_proxy, pixel_classifier, val_loader, device)
+    # 4. Run Correlation Experiment (Replace Sanity Check)
+    run_correlation_experiment(rae, latent_proxy, pixel_classifier, val_loader, device)

@@ -77,6 +77,8 @@ class RAE(nn.Module):
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         # normalize input
+        x = x * 0.5 + 0.5
+
         _, _, h, w = x.shape
         if h != self.encoder_input_size or w != self.encoder_input_size:
             x = nn.functional.interpolate(x, size=(self.encoder_input_size, self.encoder_input_size), mode='bicubic', align_corners=False)
@@ -106,6 +108,8 @@ class RAE(nn.Module):
         output = self.decoder(z, drop_cls_token=False).logits
         x_rec = self.decoder.unpatchify(output)
         x_rec = x_rec * self.encoder_std.to(x_rec.device) + self.encoder_mean.to(x_rec.device)
+
+        x_rec = (x_rec - 0.5) * 2.0
         return x_rec
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:

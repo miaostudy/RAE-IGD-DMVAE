@@ -264,7 +264,8 @@ parser.add_argument("--latent_scale", type=float, default=1.0)
 # Decoder config specific path
 parser.add_argument("--decoder_config_path", type=str, default=None,
                     help="Explicit path to decoder config if needed")
-
+parser.add_argument("--image_size", type=int, default=256,
+                    help="Explicit path to decoder config if needed")
 parser.set_defaults(bottleneck=True)
 parser.set_defaults(verbose=False)
 args = parser.parse_args()
