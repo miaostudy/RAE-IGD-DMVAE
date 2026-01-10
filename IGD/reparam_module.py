@@ -146,13 +146,15 @@ class ReparamModule(nn.Module):
             return self.module(*inputs, **kwinputs)
 
     def forward(self, *inputs, flat_param=None, buffers=None, **kwinputs):
-        flat_param = torch.squeeze(flat_param)
         # print("PARAMS ON DEVICE: ", flat_param.get_device())
         # print("DATA ON DEVICE: ", inputs[0].get_device())
         # flat_param.to("cuda:{}".format(inputs[0].get_device()))
         # self.module.to("cuda:{}".format(inputs[0].get_device()))
         if flat_param is None:
             flat_param = self.flat_param
+        else:
+            flat_param = torch.squeeze(flat_param)
+
         if buffers is None:
             return self._forward_with_param(flat_param, *inputs, **kwinputs)
         else:

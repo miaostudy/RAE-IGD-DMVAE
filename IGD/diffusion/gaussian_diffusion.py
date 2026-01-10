@@ -459,7 +459,7 @@ class GaussianDiffusion:
                  - 'sample': a random sample from the model.
                  - 'pred_xstart': a prediction of x_0.
         """
-        x = copy.deepcopy(x.data).requires_grad_(True)
+        x = copy.deepcopy(x.data).detach().requires_grad_(True)
         # print('x shape',x.shape)
         # print('cur t',t[0])
         out = self.p_mean_variance(
@@ -476,6 +476,13 @@ class GaussianDiffusion:
         )  # no noise when t == 0
         if cond_fn is not None:
             out["mean"] = self.condition_mean(cond_fn, out, x, t, model_kwargs=model_kwargs)
+            # === Check for new Latent IGD ===
+        instep_latent = False
+        if model_kwargs['gen_type'] == 'igd_latent':
+            if t[0] >= model_kwargs['low'] and t[0] <= model_kwargs['high']:
+                instep_latent = True
+            else:
+                instep_latent = False
         if model_kwargs['gen_type'] == 'igd':
             if t[0] >= model_kwargs['low'] and t[0] <= model_kwargs['high']:
                 instep = True
@@ -557,6 +564,134 @@ class GaussianDiffusion:
                     # reset the count for recursion
                     model_kwargs['gm_resource'][6] = model_kwargs['gm_resource'][7]
 
+
+        # latent gudience
+        elif model_kwargs['gen_type'] == 'igd_latent' and instep_latent:
+            # Base sample calculation
+            sample = out["mean"].detach().data + nonzero_mask * th.exp(0.5 * out["log_variance"]) * noise
+            used_sample0, _ = sample.chunk(2, dim=0)
+            x_t, _ = x.data.detach().chunk(2, dim=0)
+
+            # --- A. Deviation Guidance (Diversity) ---
+            # Identical to original IGD as it already operates on latents
+            if len(model_kwargs['pseudo_memory_c']) > 0:
+                neg_embeddings = torch.cat(model_kwargs['pseudo_memory_c']).flatten(start_dim=1)
+                neg_idx = cosine_similarity(
+                    x_t.flatten(start_dim=1), neg_embeddings
+                )[0].argmax().item()
+
+                x_t = x_t.requires_grad_(True)
+                with torch.enable_grad():
+                    cos_sim = cos_loss(x_t.flatten(), model_kwargs['pseudo_memory_c'][neg_idx].flatten())
+                    cos_guide = torch.autograd.grad(cos_sim, x_t)[0].data.detach()
+
+                used_sample = used_sample0.data - model_kwargs['neg_e'] * cos_guide
+            else:
+                used_sample = used_sample0.data
+
+            # --- B. Influence Guidance (Latent Proxy) ---
+            # No Decode! Use pred_xstart (latent) directly with normalization.
+            pred_xstart = out["pred_xstart"]
+
+            # We take the conditional part of pred_xstart (assuming CFG, chunk 2)
+            pred_xstart_cond, _ = pred_xstart.chunk(2, dim=0)
+
+            gm_guide = torch.zeros_like(used_sample.data)
+
+            # Prepare Proxy Target Label
+            target_label = model_kwargs['gm_resource'][4]
+            pseudo_target = torch.full((pred_xstart_cond.shape[0],), target_label, dtype=torch.long, device=x.device)
+
+            with torch.enable_grad():
+                # Normalize latents before passing to proxy
+                # Assuming 'latent_stats' is provided in model_kwargs (dict with 'mean', 'std')
+                if 'latent_stats' in model_kwargs and model_kwargs['latent_stats'] is not None:
+                    stats = model_kwargs['latent_stats']
+                    mean_v = stats['mean'].to(x.device)
+                    std_v = stats['std'].to(x.device)
+                    # (x - mean) / std
+                    lat_in = (pred_xstart_cond - mean_v) / (std_v + 1e-6)
+                else:
+                    # Fallback: assume already normalized or no stats provided
+                    lat_in = pred_xstart_cond
+
+                # Loop through checkpoints (Influence Function)
+                ckpts = model_kwargs['gm_resource'][2]
+                surrogate = model_kwargs['gm_resource'][1]  # This should be the LatentProxy
+                real_grads = model_kwargs['gm_resource'][3]
+                criterion = model_kwargs['gm_resource'][5]
+
+                for i, ckpt in enumerate(ckpts):
+                    # Prepare proxy parameters
+                    cur_params = torch.cat([p.data.to(x.device).reshape(-1) for p in ckpt], 0).requires_grad_(True)
+                    real_grad = real_grads[i].to(x.device)
+
+                    # Forward Proxy (Latent Input)
+                    # Note: surrogate must accept (x, flat_param) if using ReparamModule
+                    pseudo_pred = surrogate(lat_in, flat_param=cur_params)
+                    pseudo_loss = criterion(pseudo_pred, pseudo_target)
+
+                    # 1. Gradient w.r.t Proxy Parameters (for Matching)
+                    pseudo_grad = torch.autograd.grad(pseudo_loss, cur_params, create_graph=True)[0]
+
+                    # 2. Gradient Matching Loss
+                    ckpt_gm_loss = gm_loss(pseudo_grad, real_grad) / len(ckpts)
+
+                    # 3. Gradient w.r.t x (Guidance Direction)
+                    # We retain graph only if not the last iteration
+                    retain = (i < len(ckpts) - 1)
+
+                    # Important: We differentiate gm_loss w.r.t 'x'.
+                    # 'ckpt_gm_loss' depends on 'pseudo_grad', which depends on 'lat_in',
+                    # which depends on 'pred_xstart_cond', which depends on 'x'.
+                    # So the gradient flows all the way back.
+                    grads = torch.autograd.grad(ckpt_gm_loss, x, retain_graph=retain)[0]
+
+                    # Extract conditional part of gradient
+                    if grads is not None:
+                        grad_cond, _ = grads.chunk(2, dim=0)
+                        gm_guide += grad_cond.data
+
+            # --- C. Apply Guidance ---
+            # Adaptive Scaling (same logic as pixel)
+            rho_t = (out["l2"] / (gm_guide.data * gm_guide.data).mean().sqrt()) * self.sqrt_one_minus_alphas_cumprod[
+                t[0]].item()
+
+            # Scale factor from args
+            gm_scale = model_kwargs['gm_resource'][-1]  # Assuming scale is at -1 or 8
+
+            used_sample1 = used_sample - rho_t * gm_scale * gm_guide
+
+            del gm_guide, cur_params, pseudo_grad, used_sample, x
+            gc.collect()
+            torch.cuda.empty_cache()
+
+            # --- D. Recursion (Same as IGD) ---
+            if model_kwargs['gm_resource'][6] > 1:
+                model_kwargs['gm_resource'][6] -= 1
+
+                epsilon2 = torch.randn_like(used_sample1)
+                beta_bar = _extract_into_tensor(self.betas, t[0], used_sample1.shape)
+
+                # Re-noise the guided sample
+                # Note: sample is (2*B, C, H, W). We update the first half (cond).
+                sample[0, :, :, :] = th.sqrt(1 - beta_bar) * used_sample1 + th.sqrt(beta_bar) * epsilon2
+
+                # Recursive call
+                out = self.p_sample(
+                    model,
+                    sample.detach().data,  # Detach to stop gradient explosion
+                    t,
+                    clip_denoised=clip_denoised,
+                    denoised_fn=denoised_fn,
+                    cond_fn=cond_fn,
+                    model_kwargs=model_kwargs,
+                )
+                sample = out['sample']
+            else:
+                sample[0, :, :, :] = used_sample1
+                # Reset recursion counter
+                model_kwargs['gm_resource'][6] = model_kwargs['gm_resource'][7]
         # except:
         else:
             # print('true1')
