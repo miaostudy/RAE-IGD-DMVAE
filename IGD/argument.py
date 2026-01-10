@@ -112,7 +112,7 @@ parser.add_argument('--depth', default=10, type=int, help='depth of the network'
 parser.add_argument('--width', default=1.0, type=float, help='width of the network')
 
 # Training
-parser.add_argument('--epochs', default=300, type=int, help='number of training epochs')
+parser.add_argument('--epochs', default=3000, type=int, help='number of training epochs')
 parser.add_argument('--batch_size', default=64, type=int, help='mini-batch size for training')
 parser.add_argument('--lr', default=0.01, type=float, help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')

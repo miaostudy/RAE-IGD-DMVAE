@@ -44,10 +44,10 @@ class LatentProxy(nn.Module):
         self.net = nn.Sequential(
             nn.Linear(input_dim, 2048),
             nn.ReLU(),
-            nn.Dropout(0.1),
+            nn.Dropout(0.3),  # Increased Dropout
             nn.Linear(2048, 2048),
             nn.ReLU(),
-            nn.Dropout(0.1),
+            nn.Dropout(0.3),  # Increased Dropout
             nn.Linear(2048, num_classes)
         )
 
@@ -94,13 +94,15 @@ def extract_latents_and_normalize(model, data_loader, device, max_batches=200):
     return latents, labels, stats
 
 
-def train_proxy(latents, labels, device, num_classes=1000, epochs=5):
-    print(f"Training Proxy on {len(labels)} samples...")
+def train_proxy(latents, labels, device, num_classes=1000, epochs=5):  # Epochs 改回 5 或保持 3 均可
+    print(f"Training Proxy on {len(labels)} samples (Epochs={epochs}, w/ Noise Augmentation)...")
     input_dim = np.prod(latents.shape[1:])
 
     proxy = LatentProxy(input_dim, num_classes).to(device)
-    optimizer = optim.Adam(proxy.parameters(), lr=1e-3)
-    criterion = nn.CrossEntropyLoss()
+    # 保持 weight_decay 防止 Logits 爆炸
+    optimizer = optim.Adam(proxy.parameters(), lr=1e-3, weight_decay=1e-4)
+    # 保持 label_smoothing 防止梯度消失
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
     dataset = TensorDataset(latents, labels)
     loader = DataLoader(dataset, batch_size=256, shuffle=True)
@@ -112,8 +114,16 @@ def train_proxy(latents, labels, device, num_classes=1000, epochs=5):
         total = 0
         for z_batch, y_batch in loader:
             z_batch, y_batch = z_batch.to(device), y_batch.to(device)
+
+            # === [关键修改]：加入高斯噪声 ===
+            # std=1.0 是因为我们之前把 latents 归一化到了 std=1
+            # 0.1~0.2 的噪声强度通常比较合适，模拟估计误差
+            noise = torch.randn_like(z_batch) * 0.15
+            z_noisy = z_batch + noise
+            # ==============================
+
             optimizer.zero_grad()
-            output = proxy(z_batch)
+            output = proxy(z_noisy)  # 使用加噪后的输入
             loss = criterion(output, y_batch)
             loss.backward()
             optimizer.step()
@@ -134,10 +144,13 @@ def get_real_gradients(proxy, latents, labels, target_class_idx, device, grad_ip
     Calculate average gradient of proxy parameters on REAL (Normalized) data.
     """
     proxy.eval()
-    criterion = nn.CrossEntropyLoss()
+    # Ensure criterion matches training (label smoothing) to keep gradients consistent
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
     cls_mask = (labels == target_class_idx)
     cls_latents = latents[cls_mask]
+
+    # print(f"[Debug] get_real_gradients for Class {target_class_idx}: Found {len(cls_latents)} samples.")
 
     if len(cls_latents) == 0:
         return [torch.zeros_like(p) for p in proxy.parameters()]
@@ -152,6 +165,10 @@ def get_real_gradients(proxy, latents, labels, target_class_idx, device, grad_ip
     logits = proxy(cls_latents)
     loss = criterion(logits, targets)
     grads = torch.autograd.grad(loss, proxy.parameters())
+
+    # Debug: Check gradient norm
+    # total_norm = sum([g.norm().item() for g in grads])
+    # print(f"[Debug] Real Gradient Total Norm: {total_norm:.6f}")
 
     return [g.detach() for g in grads]
 
@@ -214,7 +231,9 @@ def igd_ode_sample(model, z, steps, model_kwargs, device):
     target_y_proxy = model_kwargs.get('y_proxy', target_y_global)
 
     is_cfg = (x.shape[0] == 2 * target_y_proxy.shape[0])
-    criterion = nn.CrossEntropyLoss()
+
+    # Match training criterion
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
     # Prep Memory (Normalized)
     mem_tensor = None
@@ -232,6 +251,7 @@ def igd_ode_sample(model, z, steps, model_kwargs, device):
         t_in = torch.full((x.shape[0],), t_curr, device=device, dtype=torch.float)
 
         # 1. Forward DiT
+        # We need gradients w.r.t input x_in_raw later, so v_pred used in guidance must be consistent
         if 'cfg_scale' in model_kwargs and model_kwargs['cfg_scale'] > 1.0:
             v_pred = model(x, t_in, model_kwargs['y'])
         else:
@@ -259,9 +279,9 @@ def igd_ode_sample(model, z, steps, model_kwargs, device):
 
             total_guidance = torch.zeros_like(x_in_raw)
 
-            # 【CRITICAL FIX】: 全部计算必须在 enable_grad 内部，包括归一化
+            # 【CRITICAL FIX】: 全部计算必须在 enable_grad 内部
             with torch.enable_grad():
-                # Normalize inputs for Proxy (Inside enable_grad to build graph)
+                # Normalize inputs for Proxy
                 x_in_norm = (x_in_raw - mean_val) / (std_val + 1e-6)
 
                 # --- A. Influence Guidance (Gradient Matching) ---
@@ -269,7 +289,7 @@ def igd_ode_sample(model, z, steps, model_kwargs, device):
                     logits = latent_proxy(x_in_norm)
                     loss_gen = criterion(logits, target_y_proxy)
 
-                    # 1. Gradients w.r.t parameters (Create Graph for 2nd derivative)
+                    # 1. Gradients w.r.t parameters
                     gen_grads = torch.autograd.grad(loss_gen, latent_proxy.parameters(), create_graph=True)
 
                     # 2. Match Loss
@@ -278,9 +298,12 @@ def igd_ode_sample(model, z, steps, model_kwargs, device):
                         match_loss += ((g_gen - g_real) ** 2).sum()
 
                     inf_loss_val = match_loss.item()
+
                     should_retain = (mem_tensor is not None and div_scale > 0)
                     # 3. Gradients w.r.t input x_in_raw
-                    grad_inf_tuple = torch.autograd.grad(match_loss, x_in_raw, allow_unused=True,retain_graph=should_retain)
+                    grad_inf_tuple = torch.autograd.grad(match_loss, x_in_raw, allow_unused=True,
+                                                         retain_graph=should_retain)
+
                     if grad_inf_tuple[0] is not None:
                         grad_inf = grad_inf_tuple[0]
 
@@ -291,7 +314,6 @@ def igd_ode_sample(model, z, steps, model_kwargs, device):
                         scaled_grad_inf = grad_inf * (v_norm / g_inf_norm) * inf_scale
                         scaled_grad_inf = torch.clamp(scaled_grad_inf, -0.5, 0.5)
 
-                        # Move opposite to gradient to minimize loss
                         total_guidance = total_guidance + scaled_grad_inf
 
                 # --- B. Deviation Guidance (Diversity) ---
@@ -413,7 +435,6 @@ def main(args):
 
         def decode_fn(z):
             img = rae.decode(z)
-            print(img)
             return img
 
         if 'misc' in config and 'latent_size' in config['misc']:
@@ -451,8 +472,19 @@ def main(args):
         all_labels_tensor = labels
         latent_stats = stats
 
-        # Train
-        latent_proxy = train_proxy(latents, labels, device, num_classes=num_classes_data, epochs=5)
+        # =========================================================
+        # FIX 1: Remap ImageNette labels (0-9) to ImageNet original IDs
+        # =========================================================
+        if args.spec == 'nette' and len(class_labels) == 10:
+            print("[Info] Remapping ImageNette dataset labels (0-9) to ImageNet original IDs...")
+            mapper = torch.tensor(class_labels, dtype=torch.long, device=labels.device)
+            labels = mapper[labels.long()]
+            num_classes_data = 1000
+            all_labels_tensor = labels
+        # =========================================================
+
+        # Train with reduced epochs
+        latent_proxy = train_proxy(latents, labels, device, num_classes=num_classes_data, epochs=3)
 
     except Exception as e:
         print(f"Warning: Failed to train proxy. Error: {e}")
@@ -469,12 +501,16 @@ def main(args):
     for i, class_label in enumerate(class_labels):
         sel_class_name = sel_classes[i] if i < len(sel_classes) else str(class_label)
 
-        if sel_class_name in proxy_class_map:
+        # =========================================================
+        # FIX 2: Ensure Proxy Label ID matches the Remapped ID
+        # =========================================================
+        if args.spec == 'nette':
+            proxy_label_idx = class_label
+        elif sel_class_name in proxy_class_map:
             proxy_label_idx = proxy_class_map[sel_class_name]
         else:
             proxy_label_idx = class_label
-            if latent_proxy is not None and proxy_label_idx >= 10:
-                proxy_label_idx = 0
+        # =========================================================
 
         save_class_dir = os.path.join(args.save_dir, sel_class_name)
         os.makedirs(save_class_dir, exist_ok=True)
@@ -484,7 +520,6 @@ def main(args):
         # Get Real Gradients (Influence Target)
         current_real_grads = None
         if latent_proxy is not None and all_latents_tensor is not None:
-            # Latents are already normalized, so gradients will be consistent
             current_real_grads = get_real_gradients(latent_proxy, all_latents_tensor, all_labels_tensor,
                                                     proxy_label_idx, device, grad_ipc=80)
 
@@ -516,7 +551,7 @@ def main(args):
                 gamma=args.gamma,
                 k=args.k,
                 memory_bank=current_mem,
-                stats=latent_stats,  # Pass stats
+                stats=latent_stats,
                 low=args.low,
                 high=args.high,
                 y_proxy=y_p
@@ -529,8 +564,6 @@ def main(args):
             else:
                 valid_sample = samples
 
-            # Save normalized latent to memory bank for consistent cosine sim
-            # valid_sample is raw. Normalize it before storing.
             mean_v = latent_stats['mean']
             std_v = latent_stats['std']
             valid_sample_norm = (valid_sample.detach() - mean_v) / (std_v + 1e-6)
