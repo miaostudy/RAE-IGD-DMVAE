@@ -311,8 +311,10 @@ class ImageFolder_mp(datasets.DatasetFolder):
             for i in class_indices:
                 classes.append(self.classes[i])
 
+        print(sel_class)
+
         class_to_idx = {cls_name: i for i, cls_name in enumerate(classes)}
-        class_to_idx = {key: value for key, value in class_to_idx.items() if key == sel_class}
+        # class_to_idx = {key: value for key, value in class_to_idx.items() if key == sel_class}
         # print('cls_from',cls_from)
         # print('cls_to',cls_to)
         print('class_to_idx',class_to_idx)
