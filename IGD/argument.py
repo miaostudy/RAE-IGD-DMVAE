@@ -252,6 +252,18 @@ parser.add_argument('--ckpt-dir', type=str, default='', help='name of the test d
 parser.add_argument('--spec', type=str, default='none')
 parser.add_argument('--save-interval', type=int, default=1)
 parser.add_argument('--start', type=int, default=0)
+parser.add_argument("--config", type=str, default='RAE/configs/stage2/sampling/ImageNet256/DiTDHXL-DINOv2-B.yaml',
+                    help="Path to YAML config file")
+# RAE / DMVAE specifics
+parser.add_argument("--rae_ckpt", type=str, default=None)
+parser.add_argument("--dit_ckpt", type=str, default=None)
+parser.add_argument("--vae_ckpt_path", type=str, default=None)
+parser.add_argument("--dinov2_path", type=str, default=None)
+parser.add_argument("--latent_mean", type=float, default=0.0)
+parser.add_argument("--latent_scale", type=float, default=1.0)
+# Decoder config specific path
+parser.add_argument("--decoder_config_path", type=str, default=None,
+                    help="Explicit path to decoder config if needed")
 
 parser.set_defaults(bottleneck=True)
 parser.set_defaults(verbose=False)
@@ -429,10 +441,10 @@ Evaluation setting
 # Setting evaluation training epochs
 if args.ipc > 0:
     if args.dataset == 'imagenet':
-        if args.decode_type == 'bound':
-            args.epochs = ipc_epoch(args.ipc, args.factor, args.nclass, bound=args.batch_syn_max)
-        else:
-            args.epochs = ipc_epoch(args.ipc, args.factor, args.nclass)
+        # if args.decode_type == 'bound':
+        #     args.epochs = ipc_epoch(args.ipc, args.factor, args.nclass, bound=args.batch_syn_max)
+        # else:
+        #     args.epochs = ipc_epoch(args.ipc, args.factor, args.nclass)
         args.epoch_print_freq = args.epochs // 100
         # args.epoch_print_freq = 20
         # pass

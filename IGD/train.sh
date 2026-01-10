@@ -1,17 +1,11 @@
 #!/bin/bash
 
 spec=woof
-net=resnet # resnet_ap resnet
+net=resnet_ap # resnet_ap resnet
 d=10
 ipc=10
-path=../results/dit-distillation/woof-50-dit-igd-ckpts-convnet6-k5-gamma120-r1-gi200-low30-high45
+path=./results/dit-distillation/woof-10-rae-igd-ckpts-resnet_ap-k5-gamma50-r1-gi200-low30-high45
 
-python train.py -d imagenet --imagenet_dir ${path} ../imagenet/ -n ${net} --depth ${d} --nclass 1000 --norm_type instance --ipc ${ipc} --tag test --slct_type random --spec ${spec}
-
-python IGD/train.py -d imagenet --imagenet_dir ../imagenet /data2/wlf/datasets/imagenet/ -n resnet --depth 10 --nclass 1000 --norm_type instance --ipc 10 --tag test --slct_type random --spec 1k --epoch_print_freq 1
-
-python IGD/train.py -d imagenet --imagenet_dir imagenet/ipc_10 /data2/wlf/datasets/imagenet/ -n resnet --depth 10 --nclass 1000 --norm_type instance --ipc 10 --tag test --slct_type random --spec 1k --batch_size 128 --verbose
-
-python IGD/train.py -d imagenet --imagenet_dir results/dit-distillation/nette-10-minimax-igd-ckpts-resnet-k15-gamma10-r1-gi200-low30-high45/ /data/wlf/datasets/imagenette/ -n resnet --depth 10 --nclass 10 --norm_type instance --ipc 10 --tag test --slct_type random --spec nette --batch_size 128 --verbose
+python IGD/train.py -d imagenet --imagenet_dir ${path} /data/wlf/datasets/imagenet/ -n ${net} --depth ${d} --nclass 10 --norm_type instance --ipc ${ipc} --tag test --slct_type random --spec ${spec} --batch_size 16
 
 

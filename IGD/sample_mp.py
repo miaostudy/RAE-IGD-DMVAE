@@ -105,7 +105,7 @@ def define_model(args, nclass, logger=None, size=None):
     return model
 
 def rand_ckpts(args):
-    if args.net_type == 'convnet6':
+    if args.net_type == 'convnet6' or args.net_type == 'resnet_ap':
         expert_path = './%s/%s/%s/' % (args.ckpt_path, args.spec, args.net_type)
     else:
         expert_path = './%s/%s/%s%s/'%(args.ckpt_path, args.spec,args.net_type,args.depth) #ckpt 路径./ckps/cifar10/resnet10
@@ -124,7 +124,7 @@ def rand_ckpts(args):
             # elif args.ckpt_path.startswith('ema'):
             #     idxs = [0,7,25]
             elif args.net_type == 'resnet_ap':
-                idxs = [0,6,16,39]
+                idxs = [0,6,16,39,74]
             elif args.net_type == 'resnet':
                 idxs = [0,16,33]
         elif args.ckpt_path.startswith('cut_ckpts'):

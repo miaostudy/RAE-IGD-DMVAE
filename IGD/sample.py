@@ -110,7 +110,7 @@ def define_model(args, nclass, logger=None, size=None):
 
 
 def rand_ckpts(args):
-    if args.net_type == 'convnet6':
+    if args.net_type == 'convnet6' or args.net_type == 'resnet_ap':
         expert_path = './%s/%s/%s/' % (args.ckpt_path, args.spec, args.net_type)
     else:
         expert_path = './%s/%s/%s%s/' % (args.ckpt_path, args.spec, args.net_type, args.depth)
@@ -228,6 +228,7 @@ def gm_loss(pg, rg):
     return inv_gm_dist
 
 
+@torch.no_grad()  # <--- 1. 给整个函数加上 no_grad 装饰器，或者在循环外层加 with torch.no_grad():
 def igd_ode_sample(model, z, steps, model_kwargs, device):
     """
     Euler ODE sampler with IGD gradient guidance for Flow Matching models.
@@ -249,6 +250,7 @@ def igd_ode_sample(model, z, steps, model_kwargs, device):
         t_in = torch.full((x.shape[0],), t_curr, device=device, dtype=torch.float)
 
         # 1. Forward model to get Velocity
+        # 在 @torch.no_grad() 下，这里的 v_pred 不会追踪梯度，不会构建计算图
         if 'cfg_scale' in model_kwargs and model_kwargs['cfg_scale'] > 1.0:
             v_pred = model.forward_with_cfg(x, t_in, model_kwargs['y'], model_kwargs['cfg_scale'])
         else:
@@ -262,10 +264,12 @@ def igd_ode_sample(model, z, steps, model_kwargs, device):
         guidance_grad = torch.zeros_like(x)
 
         if should_guide and gm_scale > 0:
-            with torch.enable_grad():
+            with torch.enable_grad():  # <--- 2. 这里显式开启梯度，只针对 guidance 计算
+                # x 是 detach 的（因为外层是 no_grad），所以这里必须 detach 并重新开启 requires_grad
                 x_in = x.detach().requires_grad_(True)
 
                 # Re-calculate v for gradient tracking
+                # 为了求导 x->v->x0，这里必须重算一遍 forward，并构建计算图
                 if 'cfg_scale' in model_kwargs and model_kwargs['cfg_scale'] > 1.0:
                     v_pred_grad = model.forward_with_cfg(x_in, t_in, model_kwargs['y'], model_kwargs['cfg_scale'])
                 else:
@@ -274,9 +278,10 @@ def igd_ode_sample(model, z, steps, model_kwargs, device):
                 # Flow Matching: x0 = x_t - t * v (approximate)
                 x_0_est = x_in - t_curr * v_pred_grad
 
-                # Decode
+                # Decode (RAE Decoder)
+                # 这部分显存开销很大，但在该 block 结束后会被释放，不会累积
                 pseudo_imgs = decoder.decode(x_0_est)
-
+                pseudo_imgs = pseudo_imgs * 2.0 - 1.0
                 # Gradient against Surrogate
                 pseudo_target = torch.tensor([np.ones(len(pseudo_imgs)) * label_idx], dtype=torch.long,
                                              device=device).view(-1)
@@ -296,8 +301,14 @@ def igd_ode_sample(model, z, steps, model_kwargs, device):
 
                 guidance_grad = torch.autograd.grad(total_gm_loss, x_in)[0]
 
+                # 显式删除中间变量是个好习惯，尤其涉及大模型时
+                del pseudo_imgs, x_0_est, v_pred_grad, pseudo_g
+
+            # 退出 enable_grad 后，中间图被销毁
+
         if should_guide:
-            # Heuristic scaling for Flow Matching velocity adjustment
+            # Heuristic scaling
+            # 此时 v_pred (no_grad) 和 guidance_grad (tensor, no history) 结合，安全
             v_norm = (v_pred.detach() ** 2).mean().sqrt()
             g_norm = (guidance_grad ** 2).mean().sqrt() + 1e-6
             adaptive_scale = (v_norm / g_norm) * gm_scale
@@ -403,7 +414,9 @@ def main(args):
                 model.load_state_dict(ckpt)
 
         def decode_fn(z):
-            return rae.decode(z)
+            img = rae.decode(z)
+            # 映射 [0, 1] -> [-1, 1]
+            return img * 2.0 - 1.0
 
         # Override latent size from config if available
         if 'misc' in config and 'latent_size' in config['misc']:
@@ -560,7 +573,7 @@ if __name__ == "__main__":
     parser.add_argument("--high", type=int, default=800)
     parser.add_argument("--ckpt_path", type=str, required=True)
     parser.add_argument("--repeat", type=int, required=True)
-    parser.add_argument("--device", type=str, default='cuda:1')
+    parser.add_argument("--device", type=str, default='cuda')
 
     args = parser.parse_args()
     main(args)
